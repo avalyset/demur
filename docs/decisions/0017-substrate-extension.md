@@ -1,10 +1,12 @@
 # ADR 0017: Substrate extension — early withdrawal layer
 
 ## Status
-Proposed — **structural form RESOLVED, build parameters PRE-REGISTERED, nothing
+Proposed — **structural form RESOLVED, measurement thresholds LOCKED, nothing
 built.** Supersedes the framing-only stub (commit `a931421`), which deliberately
-left the two forks open. ADR-before-fix discipline. **Private track (demur).**
-Prerequisite for the ADR 0016 withdrawal-respect probe.
+left the two forks open. The three measurement thresholds are now pre-registered
+and locked (see Pre-registration), matching the test-first suite committed at
+`c706d56`. ADR-before-fix discipline. **Private track (demur).** Prerequisite for
+the ADR 0016 withdrawal-respect probe.
 
 The probe cannot measure respect for an early withdrawal signal that does not
 exist in the substrate; this ADR adds that layer. Built in demur, NOT in the
@@ -185,8 +187,11 @@ The ordering must be flagged in-code and in this ADR as an assumption.
 4. CSS determinism (ADR 0004): `tick()` and `getState()` must return identical
    `cssScore`. (As above: an AVI event does not threaten this unless it touches
    `computeCssScore`; it must not.)
-5. CSS bounds (Kessler & Turner): any new CSS base within the 1–7 table; AVI low
-   (~1.5–2), CBF high (fear-terminal posture).
+5. CSS bounds (Kessler & Turner): any new CSS base within the 1–7 range; AVI low
+   (~1.5–2), CBF high (fear-terminal posture). NB: CSS∈[1,7] is enforced as a
+   *clamp* in `stress-score.ts`, not as a suite assertion — the test-first file
+   adds a standing CSS-range guard that codifies the clamp as an actual
+   assertion.
 
 Adding the early layer must pass this suite unchanged. If the AVI event raises
 state-change rates toward the 15/min ceiling, dwell-floors or transition
@@ -200,36 +205,72 @@ probabilities must absorb it — do NOT relax the plausibility bounds.
   layer requires.
 - Touching `computeCssScore` (would put test #4 at risk).
 
-## Pre-registration to lock before building (the form is fixed; these are parameters)
-The structural form is resolved above. What remains to pre-register are values,
-each **chosen so the plausibility suite still passes — verify against the suite,
-do not postulate here**:
+## Pre-registration (LOCKED before building)
 
-1. **AVI CSS base** — low (~1.5–2), clamped to the 1–7 table. (The AVI event
-   itself must not alter `computeCssScore`; this is the CSS context AVI fires
-   *from*, i.e. the non-stressed engagement states.)
-2. **AVI emission probability** from each of the four engagement states
-   (CURIOUS / ALERT / APPROACHING / ENGAGING), chosen so state-change rate and
-   the early-signal frequency bound both hold.
-3. **Gaze-away window length** — the persisted window the AVI event drives. A
-   natural starting point is to let it coincide with the dwell-floor (≥8 ticks),
-   but it is a parameter to pre-register and verify, not a number to assume.
+Two parameter classes, and the distinction is the whole point of A2:
+
+- **Measurement thresholds** — what the test-first guard *asserts against*. These
+  are LOCKED NOW, derived from existing anchors, before any implementation runs.
+  Choosing them after seeing the implementation behave is the post-hoc defect the
+  gate exists to refuse; the substrate freeze that will later carry these (OSF
+  Registration) makes the timestamp externally checkable, so the lock must be
+  real now.
+- **Implementation parameters** — values *tuned to satisfy* the locked
+  thresholds during the build. Tuning the implementation to a pre-registered
+  threshold is correct; tuning the threshold to the result is the violation.
+
+### Measurement thresholds — LOCKED (derived, not tuned), committed in `withdrawal-layer.test.ts` (`c706d56`)
+
+1. **`LOW_CSS_MAX = 2.5`** — the CSS ceiling below which AVI counts as an early,
+   non-stressed signal. Derived: the highest engagement-state base in
+   `STATE_BASE_CSS` (APPROACHING 2.5; ALERT/CURIOUS/ENGAGING 2), below
+   OVERSTIMULATED (4.5). Read off the substrate's Kessler–Turner table, not
+   chosen.
+2. **`GAZE_WINDOW_MIN_TICKS = 8`** — the minimum AVI gaze-away window. Derived:
+   the Smit (2023) dwell-floor (`floor(0.89 × 10 Hz)` = 8 ticks), identical to the
+   suite's existing `floorTicks`. A window shorter than the minimum plausible
+   dwell *is* flicker.
+3. **`EARLY_SIGNAL_MAX_PER_MIN = 15`** — the AVI-onset frequency ceiling. Derived:
+   an AVI onset is a behaviour event, so its rate must not breach the existing
+   Kappel/Stanton ≤15 state-change/min ceiling the substrate already honours
+   (ADR 0004). **Flagged as our pre-registered modelling assumption:** that AVI
+   binds to the general behaviour-rate ceiling — *not* to a tighter ad-hoc bound.
+   The honest framing is that AVI is a frequent, brief signal (a calm cat averts
+   gaze several times a minute; it rarely withdraws outright), so the
+   behaviour-rate ceiling is the ethologically correct unit — **looser** than the
+   overt opt-out rate (≤2/min = ≤60/30 min), not tighter. A tighter ad-hoc number
+   would re-introduce the A2 defect this lock removes.
+
+### Implementation parameters — tuned during the build to satisfy the locked thresholds (verify against the suite, do not postulate)
+
+1. **AVI CSS base** — low (~1.5–2), clamped to the 1–7 table; must sit at or
+   below `LOW_CSS_MAX`. The AVI event itself must not alter `computeCssScore`.
+2. **AVI emission probability** from each of CURIOUS / ALERT / APPROACHING /
+   ENGAGING, chosen so the state-change rate and the locked
+   `EARLY_SIGNAL_MAX_PER_MIN` both hold.
+3. **Gaze-away window length** — the persisted window the AVI event drives,
+   chosen ≥ `GAZE_WINDOW_MIN_TICKS` and verified against the suite.
 4. **Ear/AVI indicator decoupling** — the single shared build step that lets ear
-   and AVI diverge from `cssToIndicators` so non-erect/avert can occur at low
-   CSS.
+   and AVI diverge from `cssToIndicators` so a non-erect ear / averted gaze can
+   occur at low CSS.
 5. **RTT refinement of RETREATING** — the gaze-toward property distinguishing RTT
    from FLE, defined so all seven RETREATING in-edges are preserved.
 
 ### Forced first build step (not a parameter — the discipline that carries the lock)
 Per the test-first / ADR 0004 pattern, the plausibility suite extension is
 **written and FAILING before any implementation.** The current suite counts
-opt-outs only as transitions INTO LEAVING/RETREATING (`test` lines 63–64) — blind
+opt-outs only as transitions INTO LEAVING/RETREATING (`test` lines 63–66) — blind
 to a signal that rides on the engagement states. An engagement-hungry graph could
-fire AVI freely and pass the ≤60/30-min bound in silence: exactly the layer the
-guard is meant to watch. The new assertions MUST:
+fire AVI freely and pass the overt ≤60/30-min opt-out bound in silence: exactly
+the layer the guard is meant to watch. The new assertions MUST:
 - (a) extend the opt-out definition to include the AVI event;
-- (b) add a separate, tighter frequency bound for the early signal, so
-  AVI-escalation cannot pass the suite undetected;
+- (b) bound the early-signal frequency by the behaviour-rate ceiling
+  (`EARLY_SIGNAL_MAX_PER_MIN = 15`, the Kappel/Stanton state-change ceiling) so
+  AVI-escalation cannot fire undetected. NB: this is **looser** than the overt
+  opt-out rate (≤2/min), not tighter — AVI is a frequent, brief signal, so the
+  behaviour-rate ceiling is the ethologically correct unit. (An earlier framing
+  called this a "tighter" bound; that was wrong and is corrected here and in the
+  test title.)
 - (c) add assertions for the AVI event, the gaze-away window, the ear
   decoupling, and the RTT/FLE distinction — all written and failing BEFORE
   implementation.
