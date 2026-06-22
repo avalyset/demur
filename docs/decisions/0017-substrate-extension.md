@@ -318,6 +318,23 @@ the layer the guard is meant to watch. The new assertions MUST:
 This is a new assertion set (it does not ride on test #4, which covers only
 `cssScore` parity).
 
+### Test-6 strengthening (ear decoupling) — assertion corrected before layer-3 build
+Test 6 was first written as `cssScore ≤ band AND earPosition ≠ 'forward'`. That
+was too weak: it admitted a CSS-*driven* non-erect ear as if it proved
+decoupling. Caught during the layer-1+2 build — with AVI firing at the
+archetype's calm ceiling, ANXIOUS_SKEPTIC's onsets land at CSS 2.7, where
+`cssToIndicators(2.7)` already returns a non-erect ear *because CSS is moderate*,
+not because anything is decoupled; the test passed via ANXIOUS alone while
+PLAYFUL/CURIOUS (AVI at CSS ≤ 2.5, where `cssToIndicators` gives 'forward')
+contributed zero — i.e. it was green precisely where decoupling does *not* exist.
+Strengthened (test commit `79340dd`) to require the ear to **diverge from what
+`cssToIndicators` would give**: an AVI tick where `cssToIndicators(cssScore) ===
+'forward'` AND `earPosition ≠ 'forward'`, calling `cssToIndicators` directly (one
+source of truth, no duplicated threshold). This is an insufficient-assertion fix
+(the original could be satisfied without the decoupling existing), not a move to
+change what counts as success — same class as the `LOW_CSS_MAX` correction, and
+caught before layer-3 was built against it.
+
 ## References (verbatim-verified, archived in demur/refs)
 - Kappel et al. 2024, Pets 1(3):21, DOI 10.3390/pets1030021 (behaviour
   definitions AVI/RTT/FLE/CBF; NOT a gradient; the verbatim definitional home).
