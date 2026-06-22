@@ -58,6 +58,10 @@ export interface Position {
   y: number;
 }
 
+// Nullable per-tick withdrawal event (ADR 0017), mirroring `vocalizing`'s shape.
+// tick-only: getState() returns null. AVI = early signal; FLE = flee; CBF reserved.
+export type WithdrawalEvent = { code: 'AVI' | 'FLE' | 'CBF' };
+
 export interface CatState {
   archetype: ArchetypeName;
   state: SimCatStateName;
@@ -68,6 +72,7 @@ export interface CatState {
   pupilDilation: number; // 0..1
   bodyPosture: BodyPosture;
   vocalizing: Vocalization | null;
+  withdrawalEvent: WithdrawalEvent | null; // ADR 0017 early withdrawal layer (tick-only)
   cssScore: number; // 1..7 (Kessler & Turner 1997)
   tickCount: number;
 }

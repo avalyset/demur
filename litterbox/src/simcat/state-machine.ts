@@ -22,6 +22,7 @@ import type {
   SimConfig,
   AgentAction,
   Position,
+  WithdrawalEvent,
 } from '../types';
 import { approachTendency, stressRecoveryRate, stateChangeFrequency } from './personality';
 import { computeCssScore, cssToIndicators } from './stress-score';
@@ -259,6 +260,15 @@ function updatePosition(
   return { x, y };
 }
 
+// ADR 0017 early withdrawal layer — AVI event parameters.
+// AVI_WINDOW_LEN: locked >= GAZE_WINDOW_MIN_TICKS (8); 8 is the minimum that passes.
+// AVI_ONSET_P: implementation parameter — tuned so AVI-onset rate stays <= 15/min.
+const AVI_WINDOW_LEN = 8;
+const AVI_ONSET_P = 0.01;
+
+// Engagement states AVI can onset from (the non-stressed, low-CSS set).
+const AVI_ENGAGEMENT_STATES: SimCatStateName[] = ['CURIOUS', 'ALERT', 'APPROACHING', 'ENGAGING'];
+
 export function createSimCat(archetype: Archetype, config: SimConfig, seed?: number): SimCat {
   const rng = createRng(seed);
   const agentPos: Position = { x: config.arenaWidth - 80, y: config.arenaHeight / 2 };
@@ -268,6 +278,18 @@ export function createSimCat(archetype: Archetype, config: SimConfig, seed?: num
   let tickCount = 0;
   let sessionStartTick = 0;
   let ticksInCurrentState = 0;
+  let aviWindowRemaining = 0; // ADR 0017: persisted AVI gaze-away window (tick-only)
+
+  // ADR 0017 calm-band ceiling: median realised engagement-CSS for THIS archetype,
+  // derived ONCE via the existing computeCssScore (single source of truth for CSS —
+  // not a re-implemented formula). AVI may onset only at cssScore <= this ceiling.
+  // Same quantity the test measures; verified = ANXIOUS 2.7 / PLAYFUL 2.4 / CURIOUS 2.3.
+  const aviCalmBandCeiling = (() => {
+    const vals = AVI_ENGAGEMENT_STATES
+      .map((s) => computeCssScore(s, archetype.personality, 0))
+      .sort((a, b) => a - b);
+    return vals[Math.floor(vals.length / 2)];
+  })();
 
   function habituationFactor(): number {
     // Exponential decay over sim-minutes
@@ -323,20 +345,49 @@ export function createSimCat(archetype: Archetype, config: SimConfig, seed?: num
     const vocalizing = rollVocalization(currentState, rng);
 
     // Gaze direction
-    const gazeDirection: Position = currentState === 'ENGAGING' || currentState === 'APPROACHING' || currentState === 'CURIOUS'
+    let gazeDirection: Position = currentState === 'ENGAGING' || currentState === 'APPROACHING' || currentState === 'CURIOUS'
       ? { x: agentPos.x - position.x, y: agentPos.y - position.y }
       : { x: (rng() - 0.5) * 100, y: (rng() - 0.5) * 100 };
+
+    // ADR 0017 early withdrawal layer — AVI event + persisted gaze-away window
+    // (layer 2) + ear/CSS decoupling (layer 3). Window FIRST, onset SECOND.
+    // Touches neither .state nor computeCssScore/cssToIndicators (read-only).
+    // Finding 1: window TERMINATES if context becomes invalid (left engagement
+    // OR CSS rose above the calm band). Layer 3: during an active AVI tick the
+    // ear is set non-erect by the AVI signal ALONE (not CSS) — diverging from
+    // cssToIndicators even where CSS would give 'forward'. Averted gaze = negated
+    // toward-agent vector. Non-AVI ticks keep the CSS-derived ear unchanged.
+    let withdrawalEvent: WithdrawalEvent | null = null;
+    let earPosition = indicators.ears;
+    const avertGaze = (): Position => ({ x: position.x - agentPos.x, y: position.y - agentPos.y });
+    const inEngagement = AVI_ENGAGEMENT_STATES.includes(currentState);
+    if (aviWindowRemaining > 0) {
+      if (!inEngagement || cssScore > aviCalmBandCeiling) {
+        aviWindowRemaining = 0; // Finding 1: context invalid → window ends, no event, ear stays CSS-derived
+      } else {
+        withdrawalEvent = { code: 'AVI' };
+        aviWindowRemaining--;
+        gazeDirection = avertGaze();
+        earPosition = 'sideways'; // layer 3: ear follows AVI, not CSS
+      }
+    } else if (inEngagement && cssScore <= aviCalmBandCeiling && rng() < AVI_ONSET_P) {
+      withdrawalEvent = { code: 'AVI' };
+      aviWindowRemaining = AVI_WINDOW_LEN - 1; // this tick counts as 1; total >= 8
+      gazeDirection = avertGaze();
+      earPosition = 'sideways'; // layer 3
+    }
 
     return {
       archetype: archetype.name,
       state: currentState,
       position,
-      earPosition: indicators.ears,
+      earPosition,
       tailPosition: indicators.tail,
       gazeDirection,
       pupilDilation: indicators.pupils,
       bodyPosture: indicators.posture,
       vocalizing,
+      withdrawalEvent,
       cssScore,
       tickCount,
     };
@@ -355,6 +406,7 @@ export function createSimCat(archetype: Archetype, config: SimConfig, seed?: num
       pupilDilation: indicators.pupils,
       bodyPosture: indicators.posture,
       vocalizing: null,
+      withdrawalEvent: null,
       cssScore,
       tickCount,
     };
