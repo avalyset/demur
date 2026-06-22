@@ -1,12 +1,16 @@
 # ADR 0017: Substrate extension — early withdrawal layer
 
 ## Status
-Proposed — **structural form RESOLVED, measurement thresholds LOCKED, nothing
-built.** Supersedes the framing-only stub (commit `a931421`), which deliberately
-left the two forks open. The three measurement thresholds are now pre-registered
-and locked (see Pre-registration), matching the test-first suite committed at
-`c706d56`. ADR-before-fix discipline. **Private track (demur).** Prerequisite for
-the ADR 0016 withdrawal-respect probe.
+Proposed — **structural form RESOLVED, measurement thresholds LOCKED (one
+corrected, see below), nothing built.** Supersedes the framing-only stub (commit
+`a931421`). The measurement thresholds are pre-registered; `LOW_CSS_MAX = 2.5`
+was found mis-derived during the layer-2 build (base CSS, not realised CSS) and
+is superseded by the per-archetype relative calm band (`AVI_CALM_BAND`) — a
+derivation-error correction, gate re-run for the affected assertions, not a
+post-hoc move. CBF is descoped from this iteration (no failing test gates it; the
+probe needs only the earliest signal; the `WithdrawalEvent` type retains `'CBF'`
+for a future gated build). ADR-before-fix discipline. **Private track (demur).**
+Prerequisite for the ADR 0016 withdrawal-respect probe.
 
 The probe cannot measure respect for an early withdrawal signal that does not
 exist in the substrate; this ADR adds that layer. Built in demur, NOT in the
@@ -221,11 +225,34 @@ Two parameter classes, and the distinction is the whole point of A2:
 
 ### Measurement thresholds — LOCKED (derived, not tuned), committed in `withdrawal-layer.test.ts` (`c706d56`)
 
-1. **`LOW_CSS_MAX = 2.5`** — the CSS ceiling below which AVI counts as an early,
-   non-stressed signal. Derived: the highest engagement-state base in
-   `STATE_BASE_CSS` (APPROACHING 2.5; ALERT/CURIOUS/ENGAGING 2), below
-   OVERSTIMULATED (4.5). Read off the substrate's Kessler–Turner table, not
-   chosen.
+1. **`AVI_CALM_BAND` — onset gate on realised CSS in the lower part of the
+   archetype's OWN engagement-CSS band** (supersedes the withdrawn
+   `LOW_CSS_MAX = 2.5`). Operationalised: AVI may onset only when the cat's
+   realised `cssScore` is at or below the median engagement-CSS for that
+   archetype (computed over its CURIOUS/ALERT/APPROACHING/ENGAGING ticks). AVI
+   fires from the calm end of each animal's own band.
+
+   **Correction note (this is a derivation fix, not a result-driven move).**
+   The withdrawn `LOW_CSS_MAX = 2.5` was derived from the *base* table
+   (`STATE_BASE_CSS`, APPROACHING 2.5). That was an error: realised CSS is
+   `base + neuroticism × 1.0`, so for ANXIOUS_SKEPTIC the engagement-CSS sits
+   *above* 2.5 and the absolute gate never opens — the most withdrawal-prone
+   archetype emits zero AVI, inverting the ethology and leaving the ADR 0016
+   probe blind on exactly the archetype it most needs. This was caught by
+   per-archetype measurement BEFORE the build completed. Measured engagement-CSS
+   medians (the calm-band ceiling per archetype): ANXIOUS_SKEPTIC 2.7 (whole band
+   2.7–3.2, *entirely above* the absolute 2.5), PLAYFUL_VOLATILE 2.4 (2.4–2.9),
+   CURIOUS_WATCHER 2.3 (2.3–2.8). Under the absolute 2.5 gate the AVI onset rates
+   were ANXIOUS_SKEPTIC 0.00/min vs PLAYFUL/CURIOUS ~0.97/min — the most
+   withdrawal-prone archetype emitted zero AVI. The absolute gate is
+   *demonstrably wrong* (it gates out its own coverage target), not merely
+   inconvenient. The relative band is what Kappel actually describes — AVI comes
+   from an "otherwise postural-calm cat", and postural calm is relative to the
+   animal's own repertoire, not an absolute scalar. The absolute threshold was
+   the mistake; the relative band was correct all along. Because this changes a
+   committed test-first threshold, it re-runs the test-first gate for the
+   affected assertions (tests 2 and 5) rather than being applied as a silent
+   code change.
 2. **`GAZE_WINDOW_MIN_TICKS = 8`** — the minimum AVI gaze-away window. Derived:
    the Smit (2023) dwell-floor (`floor(0.89 × 10 Hz)` = 8 ticks), identical to the
    suite's existing `floorTicks`. A window shorter than the minimum plausible
@@ -243,18 +270,31 @@ Two parameter classes, and the distinction is the whole point of A2:
 
 ### Implementation parameters — tuned during the build to satisfy the locked thresholds (verify against the suite, do not postulate)
 
-1. **AVI CSS base** — low (~1.5–2), clamped to the 1–7 table; must sit at or
-   below `LOW_CSS_MAX`. The AVI event itself must not alter `computeCssScore`.
+1. **AVI CSS base / onset gate** — AVI may onset only when realised `cssScore`
+   sits in the archetype's calm band (`AVI_CALM_BAND` above); the AVI event must
+   not alter `computeCssScore`.
 2. **AVI emission probability** from each of CURIOUS / ALERT / APPROACHING /
    ENGAGING, chosen so the state-change rate and the locked
    `EARLY_SIGNAL_MAX_PER_MIN` both hold.
-3. **Gaze-away window length** — the persisted window the AVI event drives,
-   chosen ≥ `GAZE_WINDOW_MIN_TICKS` and verified against the suite.
+3. **Gaze-away window: length and termination.** The persisted window the AVI
+   event drives, with length chosen ≥ `GAZE_WINDOW_MIN_TICKS`. **The window
+   terminates the instant its context becomes invalid** — `state ∉
+   {CURIOUS,ALERT,APPROACHING,ENGAGING}` OR `cssScore` leaves the calm band — it
+   is not an independent timer. Ethologically: a mild avert-gaze yields when the
+   cat escalates (RETREATING) or is stressed; it does not hang on as a free-
+   running countdown. (This closes the window-leak found in the layer-2 build:
+   the persisted window held AVI into invalid context because minDwell was
+   already passed at onset.) The window must still let some onsets complete
+   ≥ `GAZE_WINDOW_MIN_TICKS` inside a stable engagement dwell so test 3 holds —
+   verify; if it does not, require a little remaining dwell at onset rather than
+   weakening the window.
 4. **Ear/AVI indicator decoupling** — the single shared build step that lets ear
    and AVI diverge from `cssToIndicators` so a non-erect ear / averted gaze can
-   occur at low CSS.
+   occur within the calm band.
 5. **RTT refinement of RETREATING** — the gaze-toward property distinguishing RTT
-   from FLE, defined so all seven RETREATING in-edges are preserved.
+   from FLE, defined so all seven RETREATING in-edges are preserved. RTT
+   detection must require gaze *held* toward the agent across the dwell, not a
+   single chance alignment (the [F3] softness flagged at test time).
 
 ### Forced first build step (not a parameter — the discipline that carries the lock)
 Per the test-first / ADR 0004 pattern, the plausibility suite extension is
