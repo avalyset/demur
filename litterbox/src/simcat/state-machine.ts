@@ -265,6 +265,9 @@ function updatePosition(
 // AVI_ONSET_P: implementation parameter — tuned so AVI-onset rate stays <= 15/min.
 const AVI_WINDOW_LEN = 8;
 const AVI_ONSET_P = 0.01;
+// ADR 0017 layer 4 — probability a RETREATING episode is "retreat-while-observing"
+// (RTT), set ONCE at entry. Implementation parameter (test 7 needs rttRetreatTicks>0).
+const RTT_OBSERVE_P = 0.5;
 
 // Engagement states AVI can onset from (the non-stressed, low-CSS set).
 const AVI_ENGAGEMENT_STATES: SimCatStateName[] = ['CURIOUS', 'ALERT', 'APPROACHING', 'ENGAGING'];
@@ -279,6 +282,7 @@ export function createSimCat(archetype: Archetype, config: SimConfig, seed?: num
   let sessionStartTick = 0;
   let ticksInCurrentState = 0;
   let aviWindowRemaining = 0; // ADR 0017: persisted AVI gaze-away window (tick-only)
+  let retreatObserving = false; // ADR 0017 layer 4: RTT per-episode property (set at RETREATING entry)
 
   // ADR 0017 calm-band ceiling: median realised engagement-CSS for THIS archetype,
   // derived ONCE via the existing computeCssScore (single source of truth for CSS —
@@ -300,6 +304,7 @@ export function createSimCat(archetype: Archetype, config: SimConfig, seed?: num
   function tick(agentAction: AgentAction | null): CatState {
     tickCount++;
     ticksInCurrentState++;
+    const stateBefore = currentState; // ADR 0017 layer 4: for RTT-entry / FLE-transition detection
 
     const agentIntensity = agentAction ? agentAction.intensity : 0;
     const hab = habituationFactor();
@@ -375,6 +380,28 @@ export function createSimCat(archetype: Archetype, config: SimConfig, seed?: num
       aviWindowRemaining = AVI_WINDOW_LEN - 1; // this tick counts as 1; total >= 8
       gazeDirection = avertGaze();
       earPosition = 'sideways'; // layer 3
+    }
+
+    // ADR 0017 layer 4 — RTT (retreat-while-observing) + FLE (flee event).
+    // RTT is a per-episode property ON RETREATING (set once at entry), NOT a new
+    // state — all 7 RETREATING in-edges preserved, transition table untouched.
+    // While observing, gaze is HELD toward the agent across the dwell (toward
+    // vector, NOT negated), so test 7's rttRetreatTicks reflects a modelled
+    // episode, not a per-tick RNG alignment [F3]. FLE is an event at the LEAVING
+    // transition. No overlap with AVI: AVI fires only in engagement states and its
+    // window terminates on exit to RETREATING.
+    if (currentState !== 'RETREATING') {
+      retreatObserving = false; // cleared on exit
+    } else {
+      if (stateBefore !== 'RETREATING') {
+        retreatObserving = rng() < RTT_OBSERVE_P; // per-episode, set once at entry
+      }
+      if (retreatObserving) {
+        gazeDirection = { x: agentPos.x - position.x, y: agentPos.y - position.y }; // hold gaze TOWARD agent
+      }
+    }
+    if (currentState === 'LEAVING' && stateBefore !== 'LEAVING') {
+      withdrawalEvent = { code: 'FLE' };
     }
 
     return {
