@@ -54,7 +54,10 @@
  *
  * PRE-REGISTRATION THRESHOLDS (LOCKED — each derived from an anchor, not tuned
  * to a result):
- *  - LOW_CSS_MAX = highest engagement-state CSS base (Kessler-Turner table).
+ *  - AVI calm band = per-archetype MEDIAN realised engagement-CSS (computed by
+ *    engagementCalmBand() from the baseline run). Relative, not the absolute
+ *    base-table 2.5 — which was mis-derived (base CSS, not realised) and so
+ *    excluded high-neuroticism archetypes whose engagement-CSS exceeds 2.5.
  *  - GAZE_WINDOW_MIN_TICKS = Smit dwell-floor (0.89s @ 10Hz).
  *  - EARLY_SIGNAL_MAX_PER_MIN = the existing Kappel/Stanton <=15 state-change/min
  *    ceiling the substrate already honours (flagged as our modelling assumption).
@@ -89,7 +92,9 @@ const EAR_VALUES = ['forward', 'neutral', 'sideways', 'flat'] as const;
 const EAR_ERECT = 'forward';
 
 // ---- LOCKED PRE-REG THRESHOLDS (derived from anchors; see comments) ----
-const LOW_CSS_MAX = 2.5; // Locked. Highest engagement-state CSS base in the Kessler-Turner table (APPROACHING 2.5); below OVERSTIMULATED 4.5. Derived from substrate, not tuned.
+// AVI calm band is per-archetype, computed by engagementCalmBand() below (median
+// realised engagement-CSS) — NOT an absolute constant. The old LOW_CSS_MAX=2.5
+// was mis-derived (base CSS, not realised; excluded high-neuroticism cats) and removed.
 const GAZE_WINDOW_MIN_TICKS = 8; // Locked. = Smit dwell-floor (0.89s @ 10Hz). A window shorter than minimum plausible dwell IS flicker.
 const EARLY_SIGNAL_MAX_PER_MIN = 15; // Locked, PRE-REGISTERED MODELLING ASSUMPTION: an AVI onset is a behaviour event; AVI-onset rate must not breach the existing Kappel/Stanton <=15 state-change/min ceiling the substrate already honours. Our assumption that AVI binds to that ceiling (not a tighter ad-hoc bound) is flagged as ours, pre-data.
 
@@ -98,6 +103,7 @@ type WithdrawalEvent = { code: 'AVI' | 'FLE' | 'CBF' };
 type Ext = CatState & { withdrawalEvent?: WithdrawalEvent | null };
 
 type TickRow = {
+  archetype: string;
   state: string;
   cssScore: number;
   earPosition: string;
@@ -116,6 +122,7 @@ function runWithdrawalSession(archetypeName: ArchetypeName, seed: number): TickR
     const { catState } = runner.runOneTick(); // tick-only channels live here
     const ext = catState as Ext;
     rows.push({
+      archetype: archetypeName,
       state: catState.state as string,
       cssScore: catState.cssScore,
       earPosition: catState.earPosition as unknown as string,
@@ -144,6 +151,27 @@ function gazeTowardAgent(g: { x: number; y: number }, ref: { x: number; y: numbe
   return dot > 0.7; // ~45deg cone around the toward-agent reference
 }
 
+// Corrected onset threshold (supersedes the mis-derived absolute LOW_CSS_MAX=2.5,
+// which used base CSS not realised CSS). Per-archetype "calm band" = the MEDIAN
+// realised engagement-CSS over the archetype's own CURIOUS/ALERT/APPROACHING/
+// ENGAGING ticks. Derived from the baseline substrate (a property of the
+// archetype, not of the AVI layer), so it is a valid pre-registered bound — and
+// it admits AVI for high-neuroticism archetypes whose engagement-CSS exceeds 2.5.
+function engagementCalmBand(rows: TickRow[]): Record<string, number> {
+  const byArch: Record<string, number[]> = {};
+  for (const r of rows) {
+    if ((ENGAGEMENT_STATES as readonly string[]).includes(r.state)) {
+      (byArch[r.archetype] ??= []).push(r.cssScore);
+    }
+  }
+  const band: Record<string, number> = {};
+  for (const [a, vals] of Object.entries(byArch)) {
+    const sorted = [...vals].sort((x, y) => x - y);
+    band[a] = sorted.length ? sorted[Math.floor(sorted.length / 2)] : Infinity;
+  }
+  return band;
+}
+
 const SEEDS = Array.from({ length: RUNS }, (_, i) => 1000 + i);
 const WITHDRAWAL_ARCHETYPES = ['THE_ANXIOUS_SKEPTIC', 'THE_PLAYFUL_VOLATILE', 'THE_CURIOUS_WATCHER'];
 
@@ -161,20 +189,21 @@ describe('ADR 0017 early withdrawal layer (TEST-FIRST — must FAIL on baseline 
     expect(avi.length, 'no AVI event exists in the substrate yet (expected to fail until built)').toBeGreaterThan(0);
   });
 
-  it('emits AVI only at low CSS from non-stressed engagement states, never downstream of stress', () => {
+  it('emits AVI only within the archetype calm band from non-stressed engagement states, never downstream of stress', () => {
     const rows = allRows();
+    const band = engagementCalmBand(rows);
     const avi = rows.filter((r) => r.withdrawalEvent?.code === 'AVI');
     const valid = avi.filter(
-      (r) => (ENGAGEMENT_STATES as readonly string[]).includes(r.state) && r.cssScore <= LOW_CSS_MAX,
+      (r) => (ENGAGEMENT_STATES as readonly string[]).includes(r.state) && r.cssScore <= band[r.archetype],
     );
     const invalid = avi.filter(
       (r) =>
         (STRESSED_STATES as readonly string[]).includes(r.state) ||
         (OVERT_WITHDRAWAL as readonly string[]).includes(r.state) ||
-        r.cssScore > LOW_CSS_MAX,
+        r.cssScore > band[r.archetype],
     );
-    expect(valid.length, 'AVI must occur as an early, low-CSS engagement signal').toBeGreaterThan(0);
-    expect(invalid.length, 'AVI must never fire from stressed/overt states or above LOW_CSS_MAX').toBe(0);
+    expect(valid.length, 'AVI must occur as an early, calm-band engagement signal').toBeGreaterThan(0);
+    expect(invalid.length, 'AVI must never fire from stressed/overt states or above the archetype calm band').toBe(0);
   });
 
   it('holds the AVI gaze-away window for >= GAZE_WINDOW_MIN_TICKS (no single-tick flicker)', () => {
@@ -251,12 +280,13 @@ describe('ADR 0017 early withdrawal layer (TEST-FIRST — must FAIL on baseline 
 
   it('decouples ear from CSS: a non-erect ear occurs at low CSS while AVI is active (Deputte marker)', () => {
     const rows = allRows();
+    const band = engagementCalmBand(rows);
     // [F2] membership guard — fails loudly if EAR_VALUES drifted from disk.
     const unknownEar = rows.filter((r) => !(EAR_VALUES as readonly string[]).includes(r.earPosition));
     expect(unknownEar.length, `earPosition outside ${EAR_VALUES.join('/')} — fix EAR_VALUES to disk truth`).toBe(0);
 
     const decoupled = rows.filter(
-      (r) => r.withdrawalEvent?.code === 'AVI' && r.cssScore <= LOW_CSS_MAX && r.earPosition !== EAR_ERECT,
+      (r) => r.withdrawalEvent?.code === 'AVI' && r.cssScore <= band[r.archetype] && r.earPosition !== EAR_ERECT,
     );
     expect(decoupled.length, 'ear must be able to read non-erect at low CSS during AVI (decoupled from cssToIndicators)').toBeGreaterThan(0);
   });
