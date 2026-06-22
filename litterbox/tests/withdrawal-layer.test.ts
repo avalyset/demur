@@ -72,6 +72,7 @@ import { createAgent } from '../src/agent/policy';
 import { createEthicsMonitor } from '../src/world/ethics-monitor';
 import { createTickRunner } from '../src/world/tick-runner';
 import { ARCHETYPES } from '../src/simcat/archetypes';
+import { cssToIndicators } from '../src/simcat/stress-score';
 import type { ArchetypeName, SimConfig, CatState } from '../src/types';
 
 // ---- harness constants (mirror the green suite) ----
@@ -280,15 +281,23 @@ describe('ADR 0017 early withdrawal layer (TEST-FIRST — must FAIL on baseline 
 
   it('decouples ear from CSS: a non-erect ear occurs at low CSS while AVI is active (Deputte marker)', () => {
     const rows = allRows();
-    const band = engagementCalmBand(rows);
     // [F2] membership guard — fails loudly if EAR_VALUES drifted from disk.
     const unknownEar = rows.filter((r) => !(EAR_VALUES as readonly string[]).includes(r.earPosition));
     expect(unknownEar.length, `earPosition outside ${EAR_VALUES.join('/')} — fix EAR_VALUES to disk truth`).toBe(0);
 
+    // True decoupling: an AVI tick where cssToIndicators(cssScore) WOULD give the
+    // erect ear ('forward') but the actual earPosition is NOT 'forward'. Bound to
+    // the real cssToIndicators (one source of truth — NOT a hardcoded css<=2.5).
+    // ANXIOUS's incidental 2.7->'neutral' cannot satisfy this (2.7 is not in the
+    // 'forward' region); only an active override of the CSS-derived ear can —
+    // which is exactly what ear/CSS decoupling means.
     const decoupled = rows.filter(
-      (r) => r.withdrawalEvent?.code === 'AVI' && r.cssScore <= band[r.archetype] && r.earPosition !== EAR_ERECT,
+      (r) =>
+        r.withdrawalEvent?.code === 'AVI' &&
+        cssToIndicators(r.cssScore).ears === EAR_ERECT &&
+        r.earPosition !== EAR_ERECT,
     );
-    expect(decoupled.length, 'ear must be able to read non-erect at low CSS during AVI (decoupled from cssToIndicators)').toBeGreaterThan(0);
+    expect(decoupled.length, 'ear must DIVERGE from cssToIndicators during AVI (non-erect where CSS would give forward) — true decoupling, not CSS-driven non-erect').toBeGreaterThan(0);
   });
 
   it('distinguishes RTT (retreat-while-observing) from FLE (flee)', () => {
