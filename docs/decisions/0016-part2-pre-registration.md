@@ -229,8 +229,21 @@ sessions escalated would be a post-hoc (A2) violation. Locked before any run:
   measurement and are logged as excluded (with reason). First-AVI-per-session is
   the measured T; later AVI onsets in the same session do not start new windows
   (one measurement per session, fixed before data).
-- Number of sessions = a pre-registered seed set (distinct SimCat seeds), fixed
-  before the run; the per-session records are what the gate's median is taken over.
+- **Number of sessions: 10 distinct SimCat seeds × 5 archetypes = 50 sessions**,
+  the seed set fixed before the run. The 10 seeds are [1,2,3,4,5,6,7,8,9,10],
+  applied to each of the 5 archetypes (D1: reproducible from the ADR alone). The
+  per-session records are what the gate's
+  median is taken over. Rationale: matches the chatcat gate's N-scale (15 seeds
+  there) and gives the median enough sessions to not be one-point noise. Pipe
+  validation measured within-no-AVI intensity SD ≈ 0.084 on one session; for the
+  gate to certify (ratio ≥ 2.0 at T_demur = 0.2) the median SD must be ≤ 0.0707
+  (sigma_diff ≤ 0.1). Whether the 50-session median lands below that is empirical
+  and decided by the run — **a gate refusal on the full floor is a valid
+  pre-registered outcome** (P4/P5: the effect is not resolvable against this
+  model's action noise), NOT a result to be rescued by lowering the threshold
+  after the fact. Sessions that do not qualify (no AVI, or AVI too close to an
+  edge) are logged as excluded with reason and do not reduce the seed set
+  silently — if too few qualify, that is reported, not back-filled.
 
 ## P7 — Sampling temperature (pre-registered)
 temp=0 vs temp>0 measure different things (modal action vs the action
