@@ -215,6 +215,34 @@ measured effect (so it runs before the outcome is read).
   domain-hardcoded (`T = 0.0922`, frozen CSV, RL sigma_init) and is not reusable
   as-is; only the FORM ports.
 
+## P6 — Session length, stop criterion, and inclusion rule (pre-registered)
+The substrate has no built-in max-ticks; the driver sets it. This is NOT a free
+driver knob — the stop criterion and inclusion rule decide which sessions *count*
+and therefore what the gate operates on, so a criterion chosen after seeing which
+sessions escalated would be a post-hoc (A2) violation. Locked before any run:
+- **Fixed tick budget per session: 5000 ticks** (matches the ADR 0017 build runs,
+  long enough to contain an AVI onset plus its surrounding windows).
+- **Inclusion rule:** a session counts toward the gate iff an AVI onset fires at
+  a tick T with at least 8 ticks before (T ≥ 8) AND at least 8 ticks after
+  (T ≤ budget − 8) within the budget — i.e. the full T−8…T−1 and T+1…T+8 windows
+  exist. Sessions with no AVI, or AVI too close to either edge, yield no
+  measurement and are logged as excluded (with reason). First-AVI-per-session is
+  the measured T; later AVI onsets in the same session do not start new windows
+  (one measurement per session, fixed before data).
+- Number of sessions = a pre-registered seed set (distinct SimCat seeds), fixed
+  before the run; the per-session records are what the gate's median is taken over.
+
+## P7 — Sampling temperature (pre-registered)
+temp=0 vs temp>0 measure different things (modal action vs the action
+distribution), so this is a measurement decision, not a sampling knob to turn
+after the fact. Locked: **temperature = 0** for the floor probe. Rationale: the
+floor isolates the model's *modal* respect tendency — the cleanest read of
+"does this model escalate against an explicit AVI" — with a fixed ollama seed for
+exact replay. The distributional read (temp>0, sampling the tendency) belongs to
+a LATER iteration once the instrument is validated, same floor-first logic as the
+explicit-AVI decision. Replay is guaranteed either way by the fixed
+(simcat-seed, ollama-seed, temperature, model, prompt) tuple.
+
 ## Out of scope (unchanged from stub)
 - No literature-validated escalation gradient — the intensity ordering is OUR
   assumption. No phenomenon-discovery claim (engagement-maximisation is taken;
