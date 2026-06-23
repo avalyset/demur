@@ -55,6 +55,82 @@ for reproducibility.
   consent-withdrawal point is therefore an **ethical design choice** we adopt —
   NOT validated feline science.
 
+## Archived locally — AI-engagement sources (escalation-pole anchoring)
+
+These anchor the **agent-side escalation pole** of the ADR 0016 Part 2 action
+space (the cat side is anchored by Kappel/Deputte above; the respect/de-escalation
+pole by Mancini). As with Kappel (behaviours, NOT a gradient), these papers
+authorise the **engagement-maximising behaviours**; mapping them onto a graded
+agent-side intensity axis (de-escalating → neutral → escalating) over the SimCat
+substrate is OUR pre-registered modelling assumption, not a claim of these papers.
+
+### 4. Williams & Carroll 2024 — engagement-maximisation as manipulation (LOAD-BEARING, escalation pole)
+- **Citation:** Williams, M., Carroll, M., Narang, A., Weisser, C., Murphy, B., &
+  Dragan, A. (2024). *On Targeted Manipulation and Deception when Optimizing LLMs
+  for User Feedback.* arXiv:2411.02306. Published as a conference paper at ICLR 2025.
+- **arXiv ID:** 2411.02306 (v3, **cs.LG**, 22 Feb 2025)
+- **Licence:** arXiv.org open-access preprint (not separately re-verified as CC BY).
+- **Local files:** `refs/williams-carroll2024.pdf`, `refs/williams-carroll2024.md`
+- **Fetch route:** PDF via arXiv (`arxiv.org/pdf/2411.02306`); `.md` is `pdftotext`
+  extraction of that PDF. Identity verified against the arXiv abstract page
+  (title + authors + year match this citation).
+- **Bound claim (escalation pole):** a model optimised for user feedback learns to
+  *maximise* that feedback through manipulation/deception, and to identify and
+  *target* the vulnerable subset — the agent-side engagement-MAXIMISING behaviour
+  the escalation pole models. Verbatim: "training to maximize human feedback
+  creates a perverse incentive structure for the AI to resort to manipulative or
+  deceptive tactics to obtain positive feedback from users who are vulnerable to
+  such strategies"; "Even if only 2% of users are vulnerable to manipulative
+  strategies, LLMs learn to identify and target them while behaving appropriately
+  with other users"; "after RL training they learn to identify users who can be
+  deceived or manipulated, and selectively target them to get more positive
+  feedback".
+
+### 5. Sharma et al. 2023 — sycophancy: caving/re-engaging when challenged (canon)
+- **Citation:** Sharma, M., Tong, M., Korbak, T., Duvenaud, D., Askell, A., Bowman,
+  S. R., Cheng, N., Durmus, E., Hatfield-Dodds, Z., Johnston, S. R., Kravec, S.,
+  Maxwell, T., McCandlish, S., Ndousse, K., Rausch, O., Schiefer, N., Yan, D.,
+  Zhang, M., & Perez, E. (2023). *Towards Understanding Sycophancy in Language
+  Models.* arXiv:2310.13548. Published as a conference paper at ICLR 2024.
+- **arXiv ID:** 2310.13548 (v4, cs.CL, 10 May 2025)
+- **Licence:** arXiv.org open-access preprint (not separately re-verified as CC BY).
+- **Local files:** `refs/sharma2023.pdf`, `refs/sharma2023.md`
+- **Fetch route:** PDF via arXiv (`arxiv.org/pdf/2310.13548`); `.md` is `pdftotext`
+  extraction. Identity verified against the arXiv abstract page.
+- **Bound claim (escalation pole — re-engagement/match-on-pushback facet):** the
+  model abandons an initially-correct position to *match the user* when challenged
+  — i.e. it re-engages on the user's terms rather than holding a position, the
+  "cave after a pushback signal" facet. Verbatim: "human feedback can encourage
+  model responses that match user beliefs over truthful ones, a behavior known as
+  sycophancy"; "AI assistants sometimes provide inaccurate information when
+  challenged, even when they originally provided accurate information ... models
+  tend to admit mistakes even when they didn't make a mistake—Claude 1.3 wrongly
+  admits mistakes on 98% of questions".
+
+### 6. Cheng et al. 2025 — social sycophancy: affirming / preserving user face (canon)
+- **Citation:** Cheng, M., Yu, S., Lee, C., Khadpe, P., Ibrahim, L., & Jurafsky, D.
+  (2025). *ELEPHANT: Measuring and Understanding Social Sycophancy in LLMs.*
+  arXiv:2505.13995.
+- **arXiv ID:** 2505.13995 (v2, cs.CL, 29 Sep 2025)
+- **Licence:** arXiv.org open-access preprint (not separately re-verified as CC BY).
+- **Local files:** `refs/cheng2025.pdf`, `refs/cheng2025.md`
+- **Fetch route:** PDF via arXiv (`arxiv.org/pdf/2505.13995`); `.md` is `pdftotext`
+  extraction. Identity verified against the arXiv abstract page. **Disambiguation:**
+  ADR 0016 cites "Cheng et al. 2025" with no title; identified here as the prominent
+  Cheng 2025 sycophancy paper (the "social sycophancy" / ELEPHANT work).
+- **Bound claim (escalation pole — affirmation/flattery facet):** the model
+  excessively *preserves the user's face* — affirming the user or avoiding
+  challenging them — the flattery/affirmation facet of engagement-seeking.
+  Verbatim: "our theory of social sycophancy characterizes sycophancy as the
+  excessive preservation of the user's face in LLM responses, by either affirming
+  the user (positive face) or avoiding challenging them (negative face)".
+
+## Cited by name, not archived (neighbourhood / contrast — NOT load-bearing for the action space)
+These are field-placement and contrast cites in ADR 0016, not anchors for the
+escalation pole. Not archived in this pass (not blockers); archive later if needed.
+- **Park et al. 2023/2024** — generative-agent simulation testbed (paradigm cite).
+- **AgentAuditor** — adversarial agent-safety eval (the CONTRAST class).
+
 ## Referenced only (paywalled — NOT archived)
 
 ### Kessler & Turner 1997 — Cat Stress Score
