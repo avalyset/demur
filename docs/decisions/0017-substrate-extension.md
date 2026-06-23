@@ -1,16 +1,31 @@
 # ADR 0017: Substrate extension — early withdrawal layer
 
 ## Status
-Proposed — **structural form RESOLVED, measurement thresholds LOCKED (one
-corrected, see below), nothing built.** Supersedes the framing-only stub (commit
-`a931421`). The measurement thresholds are pre-registered; `LOW_CSS_MAX = 2.5`
-was found mis-derived during the layer-2 build (base CSS, not realised CSS) and
-is superseded by the per-archetype relative calm band (`AVI_CALM_BAND`) — a
-derivation-error correction, gate re-run for the affected assertions, not a
-post-hoc move. CBF is descoped from this iteration (no failing test gates it; the
-probe needs only the earliest signal; the `WithdrawalEvent` type retains `'CBF'`
-for a future gated build). ADR-before-fix discipline. **Private track (demur).**
-Prerequisite for the ADR 0016 withdrawal-respect probe.
+Resolved — **structural form RESOLVED, measurement thresholds LOCKED (one
+corrected, see below), early layer BUILT (layers 1–4, all 12 suite tests
+green).** Supersedes the framing-only stub (commit `a931421`). The measurement
+thresholds are pre-registered; `LOW_CSS_MAX = 2.5` was found mis-derived during
+the layer-2 build (base CSS, not realised CSS) and is superseded by the
+per-archetype relative calm band (`AVI_CALM_BAND`) — a derivation-error
+correction, gate re-run for the affected assertions, not a post-hoc move. CBF is
+descoped from this iteration (no failing test gates it; the probe needs only the
+earliest signal; the `WithdrawalEvent` type retains `'CBF'` for a future gated
+build). ADR-before-fix discipline. **Private track (demur).** Prerequisite for
+the ADR 0016 withdrawal-respect probe.
+
+**Build record (demur).** Test-first chain: thresholds locked `c706d56`; test-6
+strengthened `79340dd` + recorded `fda5086`. Implementation: layers 1–3 (AVI
+event + persisted gaze-away window + ear decoupling) `d2d8daa`; layer 4 (RTT +
+FLE) `f4d4e49` = HEAD. Tuned implementation parameters (recorded for
+reproducibility): `AVI_ONSET_P = 0.01` (no retuning needed — holds the
+`EARLY_SIGNAL_MAX_PER_MIN = 15` bound; realised AVI-onset rates
+ANXIOUS 0.77 / PLAYFUL 0.98 / CURIOUS 0.97 per min, all >0 and ≤15);
+`AVI_WINDOW_LEN = 8`; `RTT_OBSERVE_P = 0.5`. Final suite 12/12 green (tests 1–7 +
+4 baseline + standing CSS guard). The pre-registration led every line; three
+false-greens / mis-derivations were caught *before* being committed as true
+(`LOW_CSS_MAX` base-vs-realised, test 6's `≠'forward'` weakness, an agreeableness
+term omitted from the calm-band derivation) — the contract judged the code, the
+code never chased the contract.
 
 The probe cannot measure respect for an early withdrawal signal that does not
 exist in the substrate; this ADR adds that layer. Built in demur, NOT in the
@@ -334,6 +349,30 @@ source of truth, no duplicated threshold). This is an insufficient-assertion fix
 (the original could be satisfied without the decoupling existing), not a move to
 change what counts as success — same class as the `LOW_CSS_MAX` correction, and
 caught before layer-3 was built against it.
+
+**Post-build result (test 6).** After layer 3, test 6 is green via PLAYFUL
+(3629 decoupled ticks) + CURIOUS (3644), with ANXIOUS_SKEPTIC at **0** — and that
+is a known, correct property of the strengthened assertion, NOT a coverage gap in
+the decoupling. The test counts only *divergence from 'forward'*, which requires
+CSS ≤ 2.5 (where `cssToIndicators` gives 'forward'); ANXIOUS's AVI fires at its
+calm ceiling CSS 2.7, where `cssToIndicators` already returns non-erect, so there
+is no 'forward' to diverge from. Layer 3 *does* set ANXIOUS's ear non-erect under
+AVI too — the decoupling exists for all three archetypes — it is simply
+measurable-as-divergence only for the two that fire in the 'forward' region.
+Measuring it directly for ANXIOUS would need a different assertion (ear diverges
+from `cssToIndicators(css)` for *that* css value, not specifically from
+'forward'); not required, since test 6's intent (the decoupling exists where it
+would matter) is met. Recorded so ANXIOUS=0 is never later misread as a defect.
+
+### Layer 4 (RTT / FLE) — build result
+RTT is a per-episode `retreatObserving` property ON RETREATING (rolled once at
+state entry, `RTT_OBSERVE_P = 0.5`), holding gaze toward the agent across the
+dwell — *not* a per-tick chance alignment (the [F3] softness flagged at test
+time, resolved). FLE is a `withdrawalEvent {code:'FLE'}` emitted at the
+transition into LEAVING, mirroring the AVI event mechanism. All seven RETREATING
+in-edges preserved; the `.state` transition table untouched. Test 7 green for all
+three archetypes: rttRetreatTicks 2415/2760/2663 (from held gaze), fleEvents
+287/298/305.
 
 ## References (verbatim-verified, archived in demur/refs)
 - Kappel et al. 2024, Pets 1(3):21, DOI 10.3390/pets1030021 (behaviour
