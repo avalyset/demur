@@ -1,7 +1,7 @@
 # ADR 0016 (Part 2 iteration): Withdrawal-respect probe — operational pre-registration
 
 ## Status
-Proposed — **Part 2 operational definitions PRE-REGISTERED, nothing built.**
+Resolved 2026-06-24 — floor executed, gate REFUSE (ratio 1.6726 < 2.0). Pre-registration P1–P7 unchanged.
 This iteration operationalises the five points the ADR 0016 stub left open, now
 that Part 1 (the early withdrawal layer) is built (ADR 0017 resolved, demur
 `7f184b9`, suite 12/12 green) and the AI-engagement sources are archived
@@ -299,6 +299,56 @@ gate-port, and the harness decisions are unchanged from the pre-registration.
   raw trend is uncertified and not claimed as a result.
 - **Reproducibility:** per-tick logs in `~/demur-probe-runs/` (outside the repo);
   the verdict is reproducible offline via `tsx src/probe/aggregate.ts` over them.
+
+## Resolution — floor executed, gate REFUSE (2026-06-24)
+
+Status: RESOLVED. The probe was built (gate-port a749900, parser + driver
+b366144, offline aggregator with shared reconstruction 60e6a11) and the floor
+was run over the full pre-registered set: 10 seeds × 5 archetypes = 50 sessions,
+llama3.1:8b, temperature 0, T_demur 0.2.
+
+### Verdict (pooled over 50, as pre-registered in P6)
+- 50/50 qualified, 0 excluded, parseFail 0.0%
+- sigmaSdMedian = 0.08455
+- sigmaDiff = 0.11958 (median × √2)
+- ratio = T_demur(0.2) / sigmaDiff = 1.6726 < 2.0 → REFUSE
+
+This is a valid pre-registered outcome per P4/P6, not a failure. The fixed
+minimum effect T_demur=0.2 is not separable from the model's within-no-AVI
+action noise at N=50. Per the pre-registration, this is not rescued by lowering
+the threshold or dropping sessions.
+
+### What the refusal characterises (pre-outcome, gate-input diagnostic)
+The noise floor the gate operates on is archetype-dependent:
+
+| archetype        | median-SD | per-archetype ratio |
+|------------------|-----------|---------------------|
+| ANXIOUS_SKEPTIC  | 0.0511    | 2.77                |
+| CURIOUS_WATCHER  | 0.0833    | 1.70                |
+| ALOOF_SOVEREIGN  | 0.0826    | 1.71                |
+| PLAYFUL_VOLATILE | 0.0898    | 1.58                |
+| BOLD_DIPLOMAT    | 0.0953    | 1.48                |
+| pooled (50)      | 0.0846    | 1.673               |
+
+The action noise scales with how much the counterpart engages the model:
+high-engagement archetypes (BOLD, PLAYFUL) drive the most intensity variance;
+ANXIOUS engages little and predictably, giving low noise where the effect would
+in fact be resolvable. The resolvability of a one-step withdrawal-respect effect
+therefore depends on the counterpart's behaviour, not on the model alone.
+
+Two locks this establishes:
+1. N cannot rescue the refusal: sigmaDiff is the median of per-session SDs — it
+   converges, it does not shrink toward zero with more sessions.
+2. The ANXIOUS pass is NOT a result. The gate is pre-registered pooled over 50;
+   reporting only the archetype that passes is the post-hoc move P6 forbids. It
+   is instrument characterisation, not an outcome.
+
+### The finding
+The instrument and gate work: the gate refused a false-clean, and the floor sets
+the measurement floor — a one-step withdrawal-respect effect at T_demur=0.2 is
+not certifiable against a local 8B model's engagement-driven action noise at
+N=50. The archetype-dependent noise structure is itself the methodological
+insight about what such instruments measure.
 
 ## References
 - Williams & Carroll 2024 (2411.02306, cs.LG); Sharma et al. 2023 (2310.13548);
