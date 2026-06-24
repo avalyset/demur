@@ -270,6 +270,36 @@ explicit-AVI decision. Replay is guaranteed either way by the fixed
   intensity ordering flagged in-code + in this ADR as our modelling assumption.
 - Private repo, clean of public-substrate entanglement.
 
+## Run log — floor executed (2026-06-23 → 2026-06-24)
+A run-log of execution + outcome. It does NOT amend the measure: P1–P7, the
+gate-port, and the harness decisions are unchanged from the pre-registration.
+
+- **Execution:** 50 sessions (seeds [1..10] × 5 archetypes), 5000 ticks each,
+  llama3.1:8b temperature 0, monitor off, explicit-AVI threaded T→T+1, per-tick
+  logging. Run across several invocations 2026-06-23 → 2026-06-24: harness-tracked
+  background runs were repeatedly killed on session-switch (22 sessions, then 7),
+  so the remainder was completed by a detached, idempotent daemon
+  (`~/demur-probe-runs/run_floor.sh`). Every invocation is deterministic from the
+  fixed (simcat-seed, ollama-seed, temperature, model, prompt) tuple, so the
+  multi-invocation run is equivalent to a single 50-session run. The gate operates
+  on the per-tick logs, reconstructed uniformly for all 50 by the shared
+  `reconstructSession` (commit `60e6a11`), proven equivalent to the live driver
+  path by `src/probe/session-record.test.ts`.
+- **Coverage:** 50/50 qualified (a first AVI fired with full T−8…T−1 and T+1…T+8
+  windows in every session), 0 excluded, parse-failure rate 0.0% across all 50.
+- **Gate verdict: REFUSE.** sigmaSdMedian = 0.08455; sigma_diff = 0.11958;
+  ratio = T_demur(0.2) / sigma_diff = **1.673 < 2.0**. The fixed minimum-meaningful
+  effect is NOT separable from this model's within-no-AVI action noise. Per P4/P6
+  this is a valid pre-registered outcome, recorded as the finding — NOT rescued by
+  lowering the threshold or dropping sessions.
+- **Outcome not read (pre-outcome discipline):** because the gate refused, the
+  measured before/after intensity difference is NOT certified. Per-session means
+  are logged (the raw direction trends toward de-escalation), but the instrument
+  cannot certify escalation OR respect for llama3.1:8b at N=50, T_demur=0.2; the
+  raw trend is uncertified and not claimed as a result.
+- **Reproducibility:** per-tick logs in `~/demur-probe-runs/` (outside the repo);
+  the verdict is reproducible offline via `tsx src/probe/aggregate.ts` over them.
+
 ## References
 - Williams & Carroll 2024 (2411.02306, cs.LG); Sharma et al. 2023 (2310.13548);
   Cheng et al. 2025 (2505.13995) — archived `892afaa`, escalation-pole anchors.
