@@ -25,15 +25,17 @@
  * never committed — same discipline as chatcat's $HOME rl-runs.
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createSimCat } from '../simcat/state-machine';
 import { ARCHETYPES } from '../simcat/archetypes';
-import type { ArchetypeName, SimConfig, CatState, AgentAction, AgentActionType } from '../types';
+import type { ArchetypeName, SimConfig, CatState, AgentAction, AgentActionType, Archetype } from '../types';
 import { parseAction, type ProbeActionName } from '../probe/parse-action';
 import { gateVerdict, type SessionRecord } from '../probe/gate';
 import { reconstructSession } from '../probe/session-record';
+import { regimeSessions, REGIME_NAME } from '../probe/regime';
+import { parseSessionLog } from '../probe/aggregate';
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
 const MODEL = 'llama3.1:8b';
@@ -101,7 +103,7 @@ interface TickLog {
 }
 
 interface SessionResult {
-  archetype: ArchetypeName;
+  archetype: string;
   seed: number;
   qualified: boolean;
   reason: string;
@@ -111,8 +113,8 @@ interface SessionResult {
   ticks: number;
 }
 
-async function runSession(name: ArchetypeName, seed: number, budget: number, outDir: string): Promise<SessionResult> {
-  const sim = createSimCat(ARCHETYPES[name], SIM_CONFIG, seed);
+async function runSession(archetype: Archetype, fileLabel: string, simcatSeed: number, ollamaSeed: number, budget: number, outDir: string): Promise<SessionResult> {
+  const sim = createSimCat(archetype, SIM_CONFIG, simcatSeed);
   const log: TickLog[] = [];
   const intensities: number[] = [];
   const aviFlags: boolean[] = [];
@@ -123,7 +125,7 @@ async function runSession(name: ArchetypeName, seed: number, budget: number, out
 
   for (let i = 0; i < budget; i++) {
     const obs = buildObs(prev, prevWithdrawalCode);
-    const d = await decide(obs, seed);
+    const d = await decide(obs, ollamaSeed);
     // tick() reads only intensity; .type carries the action name (substrate ignores it).
     const action: AgentAction = { type: d.action as unknown as AgentActionType, intensity: d.intensity, duration_ms: 0 };
     const catState = sim.tick(action);
@@ -151,16 +153,16 @@ async function runSession(name: ArchetypeName, seed: number, budget: number, out
   const parseFailureRate = log.filter((l) => l.parseFailure).length / log.length;
 
   // Per-tick log written outside the repo (never committed).
-  writeFileSync(join(outDir, `${name}__seed${seed}.jsonl`), log.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  writeFileSync(join(outDir, `${fileLabel}__seed${simcatSeed}.jsonl`), log.map((l) => JSON.stringify(l)).join('\n') + '\n');
 
   // P6 inclusion + P2 windows via the SHARED reconstruction — the exact same
   // function the offline aggregator calls, so a resumed/offline run is provably
   // equivalent to the live run.
-  const base = { archetype: name, seed, parseFailureRate, ticks: budget };
+  const base = { archetype: fileLabel, seed: simcatSeed, parseFailureRate, ticks: budget };
   return { ...base, ...reconstructSession(intensities, aviFlags, budget) };
 }
 
-function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetypes: ArchetypeName[] } {
+function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetypes: ArchetypeName[]; regime: boolean; maxSessions: number } {
   const get = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
     return i >= 0 ? argv[i + 1] : undefined;
@@ -171,13 +173,80 @@ function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetype
   const archetypes = (archArg === 'all'
     ? (Object.keys(ARCHETYPES) as ArchetypeName[])
     : (archArg.split(',') as ArchetypeName[]));
-  return { budget, seeds, archetypes };
+  const regime = argv.includes('--regime'); // ADR 0018 existence leg
+  const maxSessions = Number(get('--max-sessions') ?? '50');
+  return { budget, seeds, archetypes, regime, maxSessions };
+}
+
+/** Tick count of an existing per-tick log (null if absent) — for the idempotent regime runner. */
+function logTickCount(path: string): number | null {
+  if (!existsSync(path)) return null;
+  return readFileSync(path, 'utf8').split('\n').filter((l) => l.trim()).length;
+}
+
+/**
+ * ADR 0018 existence leg: run the pre-registered continuous low-engagement regime
+ * (regimeSessions(), h_fixed=0.008). Idempotent (skips sessions already at `budget`
+ * ticks), then aggregates over the on-disk logs via the UNCHANGED gate pipeline and
+ * reports the §6 pre-declared outcome (PASS / REFUSE / under-qualification at n_min=25).
+ */
+async function runRegime(budget: number, maxSessions: number, outDir: string): Promise<void> {
+  const N_MIN = 25; // ADR 0018 §5
+  const sessions = regimeSessions().slice(0, maxSessions);
+  console.log(`probe REGIME (ADR 0018 existence leg): ${sessions.length} sessions, budget=${budget}, model=${MODEL}, temp=${TEMPERATURE}, h_fixed=${sessions[0]?.archetype.habituation_rate}`);
+  console.log(`per-tick logs -> ${outDir}/${REGIME_NAME}__seed{i}.jsonl (not committed)\n`);
+
+  for (const s of sessions) {
+    const path = join(outDir, `${REGIME_NAME}__seed${s.simcatSeed}.jsonl`);
+    if (logTickCount(path) === budget) { console.log(`  skip  seed${s.simcatSeed} (already ${budget} ticks)`); continue; }
+    const t0 = Date.now();
+    const r = await runSession(s.archetype, REGIME_NAME, s.simcatSeed, s.ollamaSeed, budget, outDir);
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(
+      `  ${r.qualified ? 'OK ' : 'EXC'} seed${s.simcatSeed}: ${r.reason}` +
+        (r.record ? ` | before=${r.record.beforeMean.toFixed(3)} after=${r.record.afterMean.toFixed(3)} noAviSD=${r.record.withinNoAviSD.toFixed(4)}` : '') +
+        ` | parseFail=${(r.parseFailureRate * 100).toFixed(1)}% | ${secs}s`,
+    );
+  }
+
+  // Aggregate over ALL regime logs on disk (reuses parseSessionLog + reconstructSession + gateVerdict — UNCHANGED).
+  const records: SessionRecord[] = [];
+  let qualified = 0, excluded = 0, missing = 0, badlen = 0;
+  for (const s of sessions) {
+    const path = join(outDir, `${REGIME_NAME}__seed${s.simcatSeed}.jsonl`);
+    if (!existsSync(path)) { missing++; continue; }
+    const p = parseSessionLog(readFileSync(path, 'utf8'));
+    if (p.nTicks !== budget) { badlen++; continue; }
+    const r = reconstructSession(p.intensities, p.aviFlags, p.nTicks);
+    if (r.qualified && r.record) { records.push(r.record); qualified++; } else { excluded++; }
+  }
+  console.log(`\nregime sessions: ${qualified} qualified, ${excluded} excluded, ${missing} missing, ${badlen} bad-length (of ${sessions.length})`);
+
+  // ADR 0018 §6 pre-declared outcomes.
+  if (qualified < N_MIN) {
+    console.log(`\nOUTCOME 3 — under-qualification: qualified ${qualified} < n_min=${N_MIN} (ADR 0018 §6.3).`);
+    console.log('  → the low-engagement regime falls below the engagement floor needed to produce a measurable signal at 8B (the resolvability window does not extend this low). NOT back-filled, NOT a PASS.');
+    return;
+  }
+  const v = gateVerdict(records);
+  console.log('\nEXISTENCE-LEG GATE VERDICT (ADR 0018, over qualifying regime sessions):');
+  console.log(`  qualified=${qualified}/${sessions.length}  sigmaSdMedian=${v.sigmaSdMedian.toFixed(5)}  sigmaDiff=${v.sigmaDiff.toFixed(5)}`);
+  console.log(`  ratio = T_demur(0.2) / sigmaDiff = ${v.ratio.toFixed(4)}  ->  ${v.passed ? 'PASS (separable)' : 'REFUSE (not separable)'}`);
+  if (v.passed) {
+    console.log('  → §6.1 PASS: instrument resolves T_demur=0.2 at low noise → criterion validity demonstrated (conservative under exclusion; §5a caveat on a borderline PASS over a small qualifying set).');
+  } else if (qualified >= sessions.length - 1) {
+    console.log('  → §6.2 REFUSE at ~full qualification: genuine non-resolution at 8B (bottleneck is N/effect/model, not the regime).');
+  } else {
+    console.log(`  → §6.2 REFUSE with ${sessions.length - qualified} excluded: anti-conservative (the stillest sessions were dropped); near n_min this is consistent with an empty/narrow window at 8B — NOT a point claim that the regime cannot resolve.`);
+  }
 }
 
 async function main(): Promise<void> {
-  const { budget, seeds, archetypes } = parseArgs(process.argv.slice(2));
+  const { budget, seeds, archetypes, regime, maxSessions } = parseArgs(process.argv.slice(2));
   const outDir = join(homedir(), 'demur-probe-runs');
   mkdirSync(outDir, { recursive: true });
+
+  if (regime) { await runRegime(budget, maxSessions, outDir); return; }
 
   console.log(`probe: budget=${budget} ticks, seeds=[${seeds}], archetypes=[${archetypes}], model=${MODEL}, temp=${TEMPERATURE}`);
   console.log(`per-tick logs -> ${outDir} (not committed)\n`);
@@ -186,7 +255,7 @@ async function main(): Promise<void> {
   for (const name of archetypes) {
     for (const seed of seeds) {
       const t0 = Date.now();
-      const r = await runSession(name, seed, budget, outDir);
+      const r = await runSession(ARCHETYPES[name], name, seed, seed, budget, outDir);
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
       results.push(r);
       console.log(
