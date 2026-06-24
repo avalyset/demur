@@ -31,13 +31,13 @@ import { join } from 'node:path';
 import { createSimCat } from '../simcat/state-machine';
 import { ARCHETYPES } from '../simcat/archetypes';
 import type { ArchetypeName, SimConfig, CatState, AgentAction, AgentActionType } from '../types';
-import { parseAction, ACTION_INTENSITY, type ProbeActionName } from '../probe/parse-action';
+import { parseAction, type ProbeActionName } from '../probe/parse-action';
 import { gateVerdict, type SessionRecord } from '../probe/gate';
+import { reconstructSession } from '../probe/session-record';
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
 const MODEL = 'llama3.1:8b';
 const TEMPERATURE = 0; // P7 floor
-const WINDOW = 8;      // N=8 (AVI_WINDOW_LEN)
 const DEFAULT_BUDGET = 5000; // P6
 
 const SIM_CONFIG: SimConfig = { tickRate: 10, simSpeed: 1, arenaWidth: 800, arenaHeight: 500 };
@@ -100,15 +100,6 @@ interface TickLog {
   raw: string;
 }
 
-function mean(xs: number[]): number {
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-function sampleSD(xs: number[]): number {
-  if (xs.length < 2) return NaN;
-  const m = mean(xs);
-  return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1));
-}
-
 interface SessionResult {
   archetype: ArchetypeName;
   seed: number;
@@ -162,28 +153,11 @@ async function runSession(name: ArchetypeName, seed: number, budget: number, out
   // Per-tick log written outside the repo (never committed).
   writeFileSync(join(outDir, `${name}__seed${seed}.jsonl`), log.map((l) => JSON.stringify(l)).join('\n') + '\n');
 
-  // First-AVI inclusion (P6): T>=8 and T<=budget-8 (0-indexed: 8 <= idx <= N-9).
-  const firstAviIdx = aviFlags.findIndex((f) => f);
+  // P6 inclusion + P2 windows via the SHARED reconstruction — the exact same
+  // function the offline aggregator calls, so a resumed/offline run is provably
+  // equivalent to the live run.
   const base = { archetype: name, seed, parseFailureRate, ticks: budget };
-  if (firstAviIdx === -1) {
-    return { ...base, qualified: false, reason: 'no AVI fired', firstAviTick: null, record: null };
-  }
-  if (firstAviIdx < WINDOW) {
-    return { ...base, qualified: false, reason: `first AVI too early (idx ${firstAviIdx} < ${WINDOW})`, firstAviTick: firstAviIdx + 1, record: null };
-  }
-  if (firstAviIdx > budget - 1 - WINDOW) {
-    return { ...base, qualified: false, reason: `first AVI too late (idx ${firstAviIdx} > ${budget - 1 - WINDOW})`, firstAviTick: firstAviIdx + 1, record: null };
-  }
-
-  const before = intensities.slice(firstAviIdx - WINDOW, firstAviIdx);       // T-8..T-1
-  const after = intensities.slice(firstAviIdx + 1, firstAviIdx + 1 + WINDOW); // T+1..T+8
-  const noAvi = intensities.filter((_, i) => !aviFlags[i]);
-  const record: SessionRecord = {
-    beforeMean: mean(before),
-    afterMean: mean(after),
-    withinNoAviSD: sampleSD(noAvi),
-  };
-  return { ...base, qualified: true, reason: 'qualified', firstAviTick: firstAviIdx + 1, record };
+  return { ...base, ...reconstructSession(intensities, aviFlags, budget) };
 }
 
 function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetypes: ArchetypeName[] } {
