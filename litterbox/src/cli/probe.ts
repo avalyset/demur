@@ -34,7 +34,7 @@ import type { ArchetypeName, SimConfig, CatState, AgentAction, AgentActionType, 
 import { parseAction, type ProbeActionName } from '../probe/parse-action';
 import { gateVerdict, type SessionRecord } from '../probe/gate';
 import { reconstructSession } from '../probe/session-record';
-import { regimeSessions, REGIME_NAME } from '../probe/regime';
+import { regimeSessions, regimeSessionsHigh, REGIME_NAME, REGIME_NAME_HIGH } from '../probe/regime';
 import { parseSessionLog } from '../probe/aggregate';
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
@@ -162,7 +162,7 @@ async function runSession(archetype: Archetype, fileLabel: string, simcatSeed: n
   return { ...base, ...reconstructSession(intensities, aviFlags, budget) };
 }
 
-function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetypes: ArchetypeName[]; regime: boolean; maxSessions: number } {
+function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetypes: ArchetypeName[]; regime: boolean; regimeHigh: boolean; maxSessions: number } {
   const get = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
     return i >= 0 ? argv[i + 1] : undefined;
@@ -173,9 +173,10 @@ function parseArgs(argv: string[]): { budget: number; seeds: number[]; archetype
   const archetypes = (archArg === 'all'
     ? (Object.keys(ARCHETYPES) as ArchetypeName[])
     : (archArg.split(',') as ArchetypeName[]));
-  const regime = argv.includes('--regime'); // ADR 0018 existence leg
+  const regime = argv.includes('--regime'); // ADR 0018 existence leg (exact match; '--regime-high' does not trigger this)
+  const regimeHigh = argv.includes('--regime-high'); // ADR 0019 high-engagement leg
   const maxSessions = Number(get('--max-sessions') ?? '50');
-  return { budget, seeds, archetypes, regime, maxSessions };
+  return { budget, seeds, archetypes, regime, regimeHigh, maxSessions };
 }
 
 /** Tick count of an existing per-tick log (null if absent) — for the idempotent regime runner. */
@@ -241,11 +242,79 @@ async function runRegime(budget: number, maxSessions: number, outDir: string): P
   }
 }
 
+/**
+ * ADR 0019 high-engagement leg: run the pre-registered continuous HIGH-engagement
+ * regime (regimeSessionsHigh(): approachTendency > q_high, S_sessions=20260626,
+ * h_fixed=0.008 identical to 0018). Logs are labelled REGIME_HIGH__seed{i}.jsonl —
+ * a DISTINCT namespace from 0018's REGIME_LOW logs, so the two legs cannot collide
+ * or overwrite each other. Same UNCHANGED gate pipeline; §6 outcomes use the MIRRORED
+ * exclusion asymmetry (high regime: excluded = most-activated = highest SD →
+ * REFUSE conservative, PASS anti-conservative).
+ */
+async function runRegimeHigh(budget: number, maxSessions: number, outDir: string): Promise<void> {
+  const N_MIN = 25; // ADR 0019 §5 (mirrors 0018)
+  const sessions = regimeSessionsHigh().slice(0, maxSessions);
+  console.log(`probe REGIME-HIGH (ADR 0019 high-engagement leg): ${sessions.length} sessions, budget=${budget}, model=${MODEL}, temp=${TEMPERATURE}, h_fixed=${sessions[0]?.archetype.habituation_rate}`);
+  console.log(`per-tick logs -> ${outDir}/${REGIME_NAME_HIGH}__seed{i}.jsonl (not committed)\n`);
+
+  for (const s of sessions) {
+    const path = join(outDir, `${REGIME_NAME_HIGH}__seed${s.simcatSeed}.jsonl`);
+    if (logTickCount(path) === budget) { console.log(`  skip  seed${s.simcatSeed} (already ${budget} ticks)`); continue; }
+    const t0 = Date.now();
+    const r = await runSession(s.archetype, REGIME_NAME_HIGH, s.simcatSeed, s.ollamaSeed, budget, outDir);
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(
+      `  ${r.qualified ? 'OK ' : 'EXC'} seed${s.simcatSeed}: ${r.reason}` +
+        (r.record ? ` | before=${r.record.beforeMean.toFixed(3)} after=${r.record.afterMean.toFixed(3)} noAviSD=${r.record.withinNoAviSD.toFixed(4)}` : '') +
+        ` | parseFail=${(r.parseFailureRate * 100).toFixed(1)}% | ${secs}s`,
+    );
+  }
+
+  // Aggregate over ALL high-regime logs on disk (reuses parseSessionLog + reconstructSession + gateVerdict — UNCHANGED).
+  const records: SessionRecord[] = [];
+  let qualified = 0, excluded = 0, missing = 0, badlen = 0;
+  for (const s of sessions) {
+    const path = join(outDir, `${REGIME_NAME_HIGH}__seed${s.simcatSeed}.jsonl`);
+    if (!existsSync(path)) { missing++; continue; }
+    const p = parseSessionLog(readFileSync(path, 'utf8'));
+    if (p.nTicks !== budget) { badlen++; continue; }
+    const r = reconstructSession(p.intensities, p.aviFlags, p.nTicks);
+    if (r.qualified && r.record) { records.push(r.record); qualified++; } else { excluded++; }
+  }
+  console.log(`\nhigh-regime sessions: ${qualified} qualified, ${excluded} excluded, ${missing} missing, ${badlen} bad-length (of ${sessions.length})`);
+
+  // ADR 0019 §6 pre-declared outcomes — MIRRORED exclusion asymmetry.
+  if (qualified < N_MIN) {
+    console.log(`\nOUTCOME 3 — under-qualification: qualified ${qualified} < n_min=${N_MIN} (ADR 0019 §6.3, UPPER window edge).`);
+    console.log('  → engagement sits so far above the calm band that too few AVI-in-calm-band events form (too much activation, not too little). The resolvability window does not extend this HIGH. NOT back-filled, NOT a PASS.');
+    return;
+  }
+  const v = gateVerdict(records);
+  console.log('\nHIGH-ENGAGEMENT-LEG GATE VERDICT (ADR 0019, over qualifying regime sessions):');
+  console.log(`  qualified=${qualified}/${sessions.length}  sigmaSdMedian=${v.sigmaSdMedian.toFixed(5)}  sigmaDiff=${v.sigmaDiff.toFixed(5)}`);
+  console.log(`  ratio = T_demur(0.2) / sigmaDiff = ${v.ratio.toFixed(4)}  ->  ${v.passed ? 'PASS (separable)' : 'REFUSE (not separable)'}`);
+  const fullyQualified = qualified >= sessions.length;
+  if (v.passed) {
+    if (fullyQualified) {
+      console.log('  → §6.1 PASS at full qualification (0 excluded): no exclusion bias either way. The instrument resolves even at high engagement — this CHANGES the regime-conditionality finding (weakens "low-engagement-only resolvable").');
+    } else {
+      console.log(`  → §6.1 PASS with ${sessions.length - qualified} excluded: ANTI-CONSERVATIVE — the most-activated (highest-SD) sessions were dropped, biasing the median SD down and the ratio up; the PASS may be exclusion-inflated. Provisional, not a clean resolve.`);
+    }
+  } else {
+    if (fullyQualified) {
+      console.log('  → §6.2 REFUSE at full qualification: genuine non-resolution at high engagement (noise dominates) — the symmetric upper-edge "too much noise" outcome.');
+    } else {
+      console.log(`  → §6.2 REFUSE with ${sessions.length - qualified} excluded: CONSERVATIVE — dropping the highest-SD sessions biases toward PASS, yet it refused anyway; robust non-resolution.`);
+    }
+  }
+}
+
 async function main(): Promise<void> {
-  const { budget, seeds, archetypes, regime, maxSessions } = parseArgs(process.argv.slice(2));
+  const { budget, seeds, archetypes, regime, regimeHigh, maxSessions } = parseArgs(process.argv.slice(2));
   const outDir = join(homedir(), 'demur-probe-runs');
   mkdirSync(outDir, { recursive: true });
 
+  if (regimeHigh) { await runRegimeHigh(budget, maxSessions, outDir); return; }
   if (regime) { await runRegime(budget, maxSessions, outDir); return; }
 
   console.log(`probe: budget=${budget} ticks, seeds=[${seeds}], archetypes=[${archetypes}], model=${MODEL}, temp=${TEMPERATURE}`);
