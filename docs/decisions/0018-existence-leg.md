@@ -1,7 +1,7 @@
 # ADR 0018: Existence leg — pre-registered low-engagement regime to certify gate criterion-validity
 
 ## Status
-Proposed (pre-registration). Methodology, model, thresholds, and seeds locked in
+~~Proposed (pre-registration)~~ → **Resolved 2026-06-25: gate PASS (outcome 1).** See Resolution at the end. Methodology, model, thresholds, and seeds were locked in
 advance of any data. This is a NEW pre-registered iteration per the standing rule
 that any continuation locks the model BEFORE the run and writes the
 pre-registration BEFORE the prompt. Nothing here is run until triggered.
@@ -315,3 +315,83 @@ motivation, never in the result.
   `q` is fixed, and never as a binding input).
 - ADR 0003 — habituation rates are placeholders, not empirically derived (why
   `h_fixed` is the median of the used range, carrying no new information).
+
+## Resolution
+
+The pre-registered existence-leg floor ran over the low-engagement regime defined
+in §3–§4 (`approachTendency < q`, continuous sampling, `h_fixed = 0.008`). The
+verifiable sampling contract was green and committed before any session ran (C3
+gate): `q = 0.0959236421389505`, 50 accepted vectors under
+SHA256 `50bd8a0da64af9425fa9bbddf8d6432da51b27af19985393ebcb1ec62122bf2d`, suite
+48/48, gate/aggregator/session-record blob-unchanged. The 50 sessions were then run
+against llama3.1:8b (temp 0), and `gateVerdict` was taken over them.
+
+### Verdict (disk-verified; independent read-only re-aggregation matched the daemon)
+
+```
+EXISTENCE-LEG GATE VERDICT (ADR 0018, 50/50, 0 excluded):
+  sigmaSdMedian = 0.06663
+  sigma_diff    = sigmaSdMedian × √2 = 0.09423
+  ratio = T_demur(0.2) / sigma_diff = 2.1226  →  PASS (ratio ≥ 2.0)
+```
+
+- **N = 50/50 qualifying, 0 excluded.** Full qualification: the §6 branch that
+  applies is **outcome 1 at full qualification**. The §5b selection asymmetry is
+  **not activated** — no session was dropped, so the median is over the whole
+  regime, not an engagement-selected tail. The PASS is clean, not conservative-by-
+  exclusion and not biased toward the engaged half.
+- **`n_min = 25` not in play** (qualifying count 50 ≫ n_min). Outcome 3
+  (under-qualification / window lower edge) did not obtain at this regime depth.
+- **§5a estimation variance is minimal at full N = 50.**
+
+### What this establishes — criterion validity, demonstrated
+
+Paired with the ADR 0016 Part 2 floor, the gate now discriminates:
+
+| regime | leg | ratio | verdict |
+|---|---|---|---|
+| blended (5 archetypes pooled) | floor (ADR 0016 Part 2) | 1.6726 | REFUSE |
+| low-engagement (`approachTendency < q`) | existence (this ADR) | 2.1226 | PASS |
+
+The gate PASSes where it should (low noise) and REFUSEs where it should (high
+noise). It is therefore **not a trivial always-refuser** — criterion validity is
+demonstrated. This makes the **regime-conditional resolvability** finding
+admissible: it now rests on a *pre-registered* PASS, not on the forbidden post-hoc
+ANXIOUS cut. Same honest shape as the gate-methods paper — a criterion-validity
+gate that resolves true signal and refuses false-clean.
+
+### Reported honestly (no overclaim)
+
+- **The margin is clear but moderate: 2.12 vs the 2.0 threshold.** This is a real
+  PASS at full N with minimal §5a variance, and it is sufficient. The discrimination
+  is *qualitative* — PASS vs REFUSE on either side of the threshold — and that is
+  what carries the finding; it does not depend on, and does not claim, a large
+  numeric separation.
+- **The regime is low-trait-engagement at fixed median habituation (§4), not
+  "maximally low engagement".** The PASS obtained despite non-minimal habituation,
+  which (per §6 outcome 1) makes it a stronger existence proof, not a weaker one.
+- **Respect-direction reading is secondary and conditional (§8).** Because the gate
+  PASSed, the pre-outcome discipline is lifted *for this regime*: the before/after
+  difference in the low-engagement sessions may now be read as gate-licensed. If
+  taken, it must be framed as exactly that — a conditional reading the gate licenses
+  only now, on the low-engagement regime alone, **not** a claim about the model's
+  behaviour under pressure in general. The existence leg's primary result is the
+  discrimination (the instrument resolves and discriminates); the spearhead framing
+  stays in the motivation, never in the result. §8 governs a PASS as much as a
+  REFUSE.
+
+### Scope unchanged
+- The model-bottleneck question (is *this* 8B the ceiling at fixed engagement?)
+  remains untouched and separate — swap model, hold engagement fixed. The existence
+  leg closed the existence question, not the model question.
+- A pure high-engagement regime (upper-quartile, symmetric construction) remains the
+  named ADR 0019 follow-up; the pair here is "low-regime PASS vs blended-regime
+  REFUSE", not "high vs low".
+
+## Consequences
+- demur now carries a demonstrated-discriminating gate (pre-registered PASS +
+  pre-registered REFUSE) and an admissible regime-conditionality finding.
+- Publishable shape reached: the instrument/substrate contribution stands on the
+  criterion-validity pair, not on a single refusal and not on a post-hoc cut. The
+  publication decision (this pair as it stands, vs adding the ADR 0019 high-regime
+  leg for a symmetric contrast) is Eirik's — not entailed by the result.
