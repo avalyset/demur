@@ -98,7 +98,8 @@ refs/SOURCES.md             # each ethological/AI-engagement claim bound to its 
 
 ## Citation
 
-This substrate is archived as an OSF Registration (CC0; DOI assigned on registration).
+This substrate is archived as an OSF Registration (CC0):
+[10.17605/OSF.IO/WH7Z5](https://doi.org/10.17605/OSF.IO/WH7Z5) (osf.io/wh7z5).
 Please cite the accompanying demur preprint (*forthcoming*) and the OSF DOI.
 
 ## License
