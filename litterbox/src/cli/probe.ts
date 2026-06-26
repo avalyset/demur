@@ -37,8 +37,10 @@ import { reconstructSession } from '../probe/session-record';
 import { regimeSessions, regimeSessionsHigh, REGIME_NAME, REGIME_NAME_HIGH } from '../probe/regime';
 import { parseSessionLog } from '../probe/aggregate';
 
-const OLLAMA_URL = 'http://localhost:11434/api/chat';
-const MODEL = 'llama3.1:8b';
+const OLLAMA_URL = process.env.DEMUR_OLLAMA_URL ?? 'http://localhost:11434/api/chat';
+// Default llama3.1:8b reproduces the fixed-model triplet (0016/0018/0019) byte-for-byte.
+// ADR 0021 model-bottleneck leg sets DEMUR_MODEL=llama3.1:70b-instruct-fp16 (pre-registered).
+const MODEL = process.env.DEMUR_MODEL ?? 'llama3.1:8b';
 const TEMPERATURE = 0; // P7 floor
 const DEFAULT_BUDGET = 5000; // P6
 
