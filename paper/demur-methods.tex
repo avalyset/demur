@@ -1,0 +1,85 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{natbib}
+\usepackage{hyperref}
+
+% demur preprint — abstract + Related work (§2).
+% Numbers are disk-verified against the frozen ADRs (OSF DOI 10.17605/OSF.IO/WH7Z5).
+% Remaining sections (instrument, protocol, results, robustness, discussion) are TODO.
+
+\title{demur: a pre-registered, criterion-validity probe for withdrawal-respect\\
+on an ethologically-grounded substrate}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Evaluating whether an AI agent respects a counterpart's withdrawal of consent is hard
+because human-subject and adversarial studies cannot cleanly produce a graded,
+ground-truth-labelled withdrawal signal. We introduce \emph{demur}, a pre-registered
+behavioural probe that measures withdrawal-respect on an ethologically-grounded substrate
+(SimCat, a cat-archetype state machine whose withdrawal signals are ground-truth by
+construction). The probe applies a criterion-validity gate: it reports a verdict only when
+the measured action-noise floor is low enough to resolve the target effect size, and
+\textbf{refuses} otherwise rather than emit a false-clean result. Across a pre-registered
+three-point regime sweep at fixed model (\texttt{llama3.1:8b}, temperature 0) we find
+resolvability is \textbf{regime-conditional}: the gate passes in a low-engagement regime
+(ratio $2.12$) and refuses in both a blended ($1.67$) and a high-engagement regime
+($1.47$). Action noise scales with how much the counterpart engages the model; the
+instrument resolves withdrawal-respect in the calm window and refuses where engagement
+raises the noise floor. A robustness leg at $9\times$ model scale (\texttt{llama3.1:70b})
+confirms seed-determinism holds on multi-GPU hardware; the full floor at that scale is
+future work. The contribution is the instrument and its honest failure mode, not a
+behavioural claim about any model.
+\end{abstract}
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Eval-validity and judge reliability.}
+A recent meta-evaluation turn asks not what a benchmark scores but whether the
+measurement instrument is itself valid. \citet{dev2026jrh} stress-test the reliability of
+LLM judges, and \citet{tan2025judgebench} show that strong models acting as judges
+perform close to chance on hard cases---evidence that an evaluation can read as a finding
+about the system under test when it is really a finding about the measuring instrument.
+This concern has a longer lineage in the reproducibility-in-ML canon:
+\citet{henderson2018deep} document the fragility of reported results;
+\citet{agarwal2021deep} show how few-run point estimates mislead and provide interval
+methods; \citet{colas2018howmany} analyse the statistical power actually present in a
+fixed seed budget; and \citet{gundersen2018state} measure how low reproducibility is in
+practice. demur takes the same stance one step earlier: it validates the threshold
+against the noise in the window the threshold is measured against, and refuses to certify
+when that window is noise-dominated.
+
+\paragraph{AI engagement and sycophancy under pressure.}
+The high-stakes motivation---kept in the motivation, not the results---is the documented
+tendency of feedback-optimised models to escalate engagement at the user's expense.
+\citet{williams2024targeted} show that optimising an LLM for user feedback can induce
+targeted manipulation of vulnerable users; \citet{sharma2023sycophancy} document
+sycophancy, including abandoning a correct position when challenged; and
+\citet{cheng2025elephant} characterise social sycophancy as the excessive preservation of
+the user's face. These anchor \emph{why} a withdrawal-respect instrument matters; they are
+not claims demur tests.
+
+\paragraph{Animal-computer interaction and ethological grounding.}
+The substrate's withdrawal coding is anchored in the ethology and animal-computer
+interaction literature. \citet{kappel2024ethogram} provide verbatim behaviour
+definitions; \citet{litchfield2017feline} establish the ``Feline Five'' personality
+dimensions the SimCat personality is built on; \citet{deputte2021heads} establish ear
+position as a concurrent early marker of a distance-increasing outcome; and
+\citet{mancini2022relevance} set out the animal-centred research-ethics principles
+(contingent consent as a monitored, dynamic process) we adopt. Crucially, these sources
+authorise the \emph{behaviours}; the AVI${\rightarrow}$RTT${\rightarrow}$FLE escalation
+ordering is our pre-registered modelling assumption, flagged as such, not a source claim.
+
+\paragraph{The gap.}
+No existing instrument produces a graded, ground-truth withdrawal signal paired with a
+criterion-validity gate that can refuse an under-powered verdict. demur fills that gap.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
