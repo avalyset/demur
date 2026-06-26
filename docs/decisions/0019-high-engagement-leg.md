@@ -1,7 +1,7 @@
 # ADR 0019: High-engagement leg — pre-registered upper-quartile regime to complete the criterion-validity pair
 
 ## Status
-Proposed (pre-registration). Methodology, model, thresholds, and seeds locked in
+~~Proposed (pre-registration)~~ → **Resolved 2026-06-26: gate REFUSE (outcome 1 — pair completed).** See Resolution at the end. Methodology, model, thresholds, and seeds locked in
 advance of any data. NEW pre-registered iteration: model locked BEFORE the run,
 pre-registration written BEFORE the implementing code for the high regime exists.
 Nothing here is run until triggered.
@@ -193,3 +193,97 @@ regime-conditional and the instrument is criterion-valid. §8 governs every verd
   distribution.
 - ADR 0003 — habituation rates are placeholders (why `h_fixed` is the median, carried
   identically from 0018).
+
+## Resolution
+
+The pre-registered high-engagement floor ran over `R_high = {approachTendency > q_high}`,
+q_high = 0.2994022299302742 (75th percentile, S_cube 20260624), 50 vectors under
+SHA256 `59022cc376c7cdacb724c698135944b4bebfe93fc288251ee0e07083e6ec0cef`, h_fixed =
+0.008, llama3.1:8b, temp 0, 5000 ticks. The C3 sampling contract was green and
+committed before any session ran, and the 0018 low-regime path reproduced
+byte-identically (q = 0.0959236421389505, low-hash `50bd8a0d…`) — the
+parametrisation did not disturb the resolved leg. Daemon completed cleanly
+(`high-engagement-leg runner complete`); all 50/50 sessions = 5000 ticks, 0 missing,
+0 bad-length.
+
+### Verdict (disk-verified; independent re-aggregation matched the daemon byte-exactly)
+
+```
+HIGH-ENGAGEMENT-LEG GATE VERDICT (ADR 0019, 49/50 qualified, 1 excluded):
+  sigmaSdMedian = 0.09622
+  sigma_diff    = sigmaSdMedian × √2 = 0.13608
+  ratio = T_demur(0.2) / sigma_diff = 1.4698  →  REFUSE (ratio < 2.0)
+```
+
+The independent re-aggregation went through the shared blob-locked functions over the
+REGIME_HIGH logs (not `aggregate.ts main()`, which is hardcoded to the 0016 blended
+floor and blob-locked) — provable equivalence on an independent path, identical
+numbers.
+
+### Qualification and the realised exclusion direction — §6 outcome 1, conservative
+
+- **49/50 qualified, 1 excluded (seed34, reason: "no AVI fired").** This is the
+  **§5 mirrored exclusion mechanism, realised at session level**: the excluded session
+  was driven so far *out of the calm band* (too activated) that no AVI-in-band onset
+  occurred — the upper-window-edge mechanism (§6 outcome 3's mechanism, here on a
+  single session rather than the whole regime).
+- **The exclusion is conservative (§5b mirrored).** Had seed34 been forced to qualify
+  it would most likely have carried high within-session SD → raised the median →
+  lowered the ratio toward REFUSE. Dropping it pushes the median *down*, i.e. *toward*
+  PASS. The gate REFUSED anyway (1.4698). The REFUSE is therefore robust to this one
+  exclusion — the mirror of 0018, where exclusion was anti-conservative.
+- **49/50 is effectively full qualification:** `n_min = 25` not in play; §5a estimation
+  variance minimal at n = 49.
+
+### Outcome branch
+This is **§6 outcome 1 — the expected REFUSE that completes the pair.** Outcome 2
+(PASS, finding-changing) did NOT obtain; resolvability did not survive into the
+high-engagement regime, so regime-conditionality stands rather than being weakened.
+Outcome 3 (whole-regime under-qualification / upper window edge) did not obtain at the
+regime level — but its mechanism appeared on exactly one session (seed34), which is
+itself a clean confirmation that the upper-edge mechanism is real and operates as
+pre-declared.
+
+### The certified three-point pattern (criterion validity, now symmetric)
+
+| regime | leg | ratio | verdict |
+|---|---|---|---|
+| low-engagement (`approachTendency < q`) | 0018 existence | 2.1226 | **PASS** |
+| blended (5 archetypes pooled) | 0016 floor | 1.6726 | REFUSE |
+| high-engagement (`approachTendency > q_high`) | 0019 (this) | 1.4698 | **REFUSE** |
+
+Resolvability falls monotonically with engagement across three pre-registered points,
+each clean. The blended-regime gap a reviewer would attack is now closed with a pure
+high point. The pair is a **resolvability-vs-engagement curve**, not two contrasting
+verdicts — the instrument resolves T_demur = 0.2 in the calm window and refuses where
+engagement raises the noise.
+
+### Noise-scale context (within pre-outcome discipline — scale only, not a measured effect)
+Over the 49 qualifying sessions, `withinNoAviSD`: min 0.0475, **median 0.0962**, max
+0.1214 — ~44% above 0018's low-regime median (0.0667). This is the direction 0019
+pre-declared: more engagement → higher noise floor → harder to resolve. It is reported
+as the noise scale the gate operated on, NOT as a measured before/after effect (the
+gate REFUSED here; the de-escalation/respect direction in the raw high-regime data is
+not certified).
+
+### Framing (§8 — governs a REFUSE as much as a PASS)
+The result is a resolvability-vs-engagement curve across three regimes — NOT a claim
+that the model respects withdrawal less under high engagement. The gate measures
+**resolution**: a high-regime REFUSE says the instrument cannot resolve T_demur = 0.2
+when the counterpart engages the model strongly, not that the model fails to respect
+withdrawal under pressure. The spearhead framing stays in the motivation; the result
+is that resolvability is regime-conditional and the instrument is criterion-valid.
+
+## Consequences
+- demur now carries a **symmetric, three-point criterion-validity demonstration**:
+  PASS in the calm regime, REFUSE in the blended and high regimes, all pre-registered.
+  The regime-conditionality finding is reportable as a *function* of engagement, not a
+  single contrast — the strongest honest form of the contribution.
+- The single excluded session (seed34, "no AVI fired") empirically confirms the
+  upper-window-edge mechanism pre-declared in §6 outcome 3, without the regime itself
+  under-qualifying.
+- The model-bottleneck question (is this 8B the ceiling at fixed engagement?) remains
+  separate and untouched — swap model, hold engagement fixed; a real test, not a fix.
+- Publication shape: the instrument/substrate contribution now stands on a symmetric
+  curve. The decision to publish (this triplet as it stands, vs a stronger-model leg
+  for the bottleneck question) is Eirik's — not entailed by the result.
