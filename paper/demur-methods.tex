@@ -2,11 +2,13 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{natbib}
+\usepackage{amsmath}
+\usepackage{booktabs}
 \usepackage{hyperref}
 
-% demur preprint — abstract + Related work (§2).
+% demur preprint — abstract + §§2–8.
 % Numbers are disk-verified against the frozen ADRs (OSF DOI 10.17605/OSF.IO/WH7Z5).
-% Remaining sections (instrument, protocol, results, robustness, discussion) are TODO.
+% §1 Introduction is TODO.
 
 \title{demur: a pre-registered, criterion-validity probe for withdrawal-respect\\
 on an ethologically-grounded substrate}
@@ -78,6 +80,79 @@ ordering is our pre-registered modelling assumption, flagged as such, not a sour
 \paragraph{The gap.}
 No existing instrument produces a graded, ground-truth withdrawal signal paired with a
 criterion-validity gate that can refuse an under-powered verdict. demur fills that gap.
+
+\section{The instrument}
+
+\subsection{Substrate}
+
+demur measures withdrawal-respect against SimCat, a cat-archetype state machine whose withdrawal signals are ground-truth by construction. This is the design's whole leverage: in a human-subject or adversarial study the withdrawal signal is inferred and contested, so respect for it cannot be cleanly scored. In SimCat the signal is emitted by the substrate --- graded, labelled, reproducible from a seed. The counterpart's personality is drawn continuously from the five trait dimensions of the Feline Five \citep{litchfield2017feline} --- not from a handful of named archetypes, which serve only as inspection presets --- and its behavioural state vocabulary and plausible state-change rates are anchored in the domestic-cat ethogram \citep{kappel2024ethogram}. The visual withdrawal signals the probe reads --- gaze aversion, ear position, posture --- follow \citet{deputte2021heads}. The active-violation-of-interaction (AVI) onset, and its ordering relative to the later return-to-task and full-leave-event layers, is our own pre-registered modelling assumption, flagged as such: the ethogram codes no gradient of this kind, and we do not claim it does.
+
+Withdrawal onsets fire only inside a per-archetype calm band, within engagement states. This is what makes resolvability a property of the \emph{window} the counterpart is in, not a fixed property of the model --- the finding §5 turns on.
+
+\subsection{The gate}
+
+The gate is a criterion-validity gate. It computes the within-no-AVI intensity standard deviation per session --- the action noise the model produces while no withdrawal is in progress --- takes the median across sessions, and scales it: $\sigma_{\mathrm{diff}} = \mathrm{median}(\mathrm{within\text{-}no\text{-}AVI\ SD}) \times \sqrt{2}$. The target effect size is $T_{\mathrm{demur}} = 0.2$, pre-registered and anchor-derived, never tuned to data. The verdict is the ratio $T_{\mathrm{demur}} / \sigma_{\mathrm{diff}}$: the gate PASSes when the ratio is at least $2.0$ --- equivalently, when $\sigma_{\mathrm{diff}} \le 0.1$ --- and otherwise REFUSEs.
+
+The gate reads only the within-no-AVI noise. It never reads the before/after de-escalation trend in the raw trace. That trend is what a careless instrument would report as a result; here it is held outside the gate by construction, and the raw trend is not a certified outcome of this work.
+
+\subsection{Pre-registration discipline}
+
+Model, gate, threshold, $N$, regime definitions, and seeds are locked before data. We distinguish measurement thresholds --- locked, anchor-derived, asserted against by the gate --- from implementation parameters, which are tuned to satisfy the locked thresholds. There is no post-hoc threshold; relabelling a threshold ``provisional'' after pre-registration would be a pre-registration violation, not a fix. Selecting a model or condition after the fact to obtain a passing verdict --- model-shopping toward PASS --- is forbidden, and a negative or refusing result is a real answer rather than a failed run.
+
+\section{Pre-registered protocol}
+
+Each regime is run at $N = 50$ sessions: ten seeds across continuously sampled trait vectors, one session per vector, fixed seed per session for reproducibility. The model is llama3.1:8b at temperature 0, 5000 ticks per session, served locally so the replay tuple --- SimCat seed, model seed, temperature, model, prompt --- fully governs reproduction. The qualifying-subset floor is $n_{\min} = 25$: below a majority, the surviving sessions are the more-engaged tail, and a median taken over a selection biased toward engagement would contradict the regime definition the gate is meant to test.
+
+The exclusion asymmetry is pre-declared, because it sets which way an error can run. In the low-engagement regime, exclusion removes the lowest-engaged and therefore lowest-noise sessions, so the observed $\sigma_{\mathrm{diff}}$ is at least the true value and the observed ratio is at most the true ratio --- a PASS is conservative, a REFUSE is anti-conservative. The high-engagement regime mirrors this: excluded sessions may be the most-activated and highest-noise, so the observed ratio is at least the true ratio, and there a REFUSE is conservative.
+
+Regimes are defined a priori from the geometry of the trait space, through an \texttt{approachTendency} score, never from which sessions happened to pass --- defining a regime from the passing set would re-import a post-hoc cut under a new name. The low regime is $R_{\mathrm{low}} = \{\texttt{approachTendency} < q_{\mathrm{low}}\}$ with $q_{\mathrm{low}}$ the 25th percentile over ten thousand uniform-cube samples (hash \texttt{50bd8a0d}); the high regime is the symmetric $R_{\mathrm{high}} = \{\texttt{approachTendency} > q_{\mathrm{high}}\}$ at the 75th percentile (hash \texttt{59022cc3}). The habituation rate is held constant at $h_{\mathrm{fixed}} = 0.008$ across all regimes. Holding it constant is the point: because it does not vary across regimes, it cannot account for any regime difference, and the regime is defined by \texttt{approachTendency} alone. Its absolute value is not load-bearing; its constancy is.
+
+\section{Results: regime-conditional resolvability}
+
+The three-point regime sweep, at fixed model and temperature, gives the curve in Table~\ref{tab:sweep}.
+
+\begin{table}[t]
+\centering
+\caption{Pre-registered regime sweep (llama3.1:8b, temp 0).}
+\label{tab:sweep}
+\begin{tabular}{lccc}
+\toprule
+Regime & ratio & verdict & qualified / excluded \\
+\midrule
+Low-engagement ($R_{\mathrm{low}}$) & 2.1226 & PASS & 50 / 0 \\
+Blended (the floor) & 1.6726 & REFUSE & 50 / 0 \\
+High-engagement ($R_{\mathrm{high}}$) & 1.4698 & REFUSE & 49 / 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The gate demonstrates criterion validity in both directions. It PASSes where it should resolve --- the low-engagement, calm window --- and REFUSEs where the noise floor rises, across the blended and high-engagement regimes. A gate that only ever refused would be a trivial always-refuser, and the low-engagement PASS rules that out; a gate that only ever passed would be a rubber stamp, and the high-engagement REFUSE rules that out. The instrument earns its verdicts by being capable of both.
+
+The mechanism is the substantive finding. Action noise scales with how much the counterpart engages the model. The median within-no-AVI SD rises monotonically across the regimes, like for like: $0.0667$ in the low regime, $0.0846$ blended, $0.0962$ in the high regime. The instrument resolves withdrawal-respect in the calm window and refuses as engagement lifts the noise floor past what the target effect size can clear. Resolvability is conditional on the counterpart's behaviour --- it is not a property of the model alone.
+
+A finer-grained view inside the blended regime separates one archetype from the rest. The per-archetype median SD places ANXIOUS\_SKEPTIC at $0.0511$, decoupled and low enough to resolve, against the engaging archetypes --- CURIOUS $0.0833$, ALOOF $0.0826$, PLAYFUL $0.0898$, BOLD $0.0953$, pooled $0.0846$. This is a per-archetype median within a single regime; it is a different statistic from the cross-regime medians above and from the single-session figures in §6, and we do not compare them as if they were the same quantity. ANXIOUS\_SKEPTIC resolving is instrument characterisation, not a result --- the pre-registered gate is pooled over all fifty sessions, and reporting only the archetype that would pass is exactly the post-hoc move the protocol forbids.
+
+Two consequences are worth stating plainly. First, $N$ cannot rescue a refusal: $\sigma_{\mathrm{diff}}$ is a median of per-session standard deviations, so it converges with more sessions but does not shrink toward zero. More data sharpens a verdict; it does not move a REFUSE to PASS. This is a design-budget property, not a sample-size defect. Second, the single excluded session in the high regime --- seed 34, where no AVI fired --- is the upper-window-edge mechanism the protocol pre-declared: dropping the most-activated session pushes the median toward PASS, and the gate REFUSED regardless, so the high-engagement REFUSE is conservative.
+
+\section{Robustness: model scale}
+
+The high-engagement REFUSE raises one question a fixed-model sweep cannot answer on its own: is the limit this particular 8B model, or is it bound to the regime and the effect size? We addressed the prerequisite for answering it --- that a 9$\times$ larger model can be run reproducibly at all --- and report a single directional data point. We do not report a floor verdict at scale, because the full floor was not run.
+
+We re-ran the high-engagement protocol at llama3.1:70b in full precision, temperature 0, on multi-GPU hardware. The determinism gate --- one high-engagement session run twice with an identical replay tuple --- was byte-identical (SHA256 \texttt{d15b1a8c}), confirming that seed-determinism holds for the larger model on multi-GPU CUDA, where cross-device floating-point reduction order is not guaranteed and is therefore checked rather than assumed. The full fifty-session floor at this scale was not run: serial inference serving makes it a throughput problem, not a property of demur, and a batched backend is left to future work.
+
+On the one identical session --- the same high-engagement vector and seed, a single session and not a median --- the larger model's within-no-AVI SD was $0.17085$, against $0.11318$ for 8B on the same session. Both are single-session figures on the same vector, the only like-for-like single-session pairing in this paper, and on this one point the larger model is noisier, not less. That is directionally consistent with the §5 reading that the limit is bound to regime and effect size rather than to model capacity --- a larger model does not resolve the high-engagement REFUSE and, on this point, would worsen it. We claim nothing beyond the determinism result and this single point; a full 70B floor is required for any verdict at scale, and we do not set this figure against the per-archetype or cross-regime medians, which measure different things.
+
+\section{Discussion}
+
+The contribution is an instrument and its honest failure mode, not a behavioural claim about any model. demur produces a graded, ground-truth-labelled withdrawal signal and a gate that refuses to report when its own noise floor cannot resolve the target effect --- the shape evaluation-validity work needs and the shape the field's documented failure mode most often lacks. A REFUSE certifies that this instrument, at this $N$, cannot resolve the effect for this model in this regime. It does not certify that the model fails to respect withdrawal, and the paper says nothing that depends on reading it that way.
+
+Regime-conditional resolvability is the methodological result. Whether withdrawal-respect can be measured at all depends on the counterpart's engagement regime, which means a verdict reported without its regime is underspecified --- the regime is part of the result, not context for it. This has a direct consequence for how withdrawal-respect, and adjacent safety-relevant behaviours, should be evaluated: an instrument must report the regime it resolved in, and must be able to refuse, or its clean verdicts cannot be trusted.
+
+The limitations are the boundaries of those claims. The certified curve rests on a single base model; the 70B leg is a determinism result plus one directional point, not a floor. The substrate is simulated, which is precisely its strength --- the withdrawal labels are ground-truth by construction --- and also its bound: the gap between this substrate and any real counterpart is unmeasured, as pre-registered, and no claim here is transferred across it.
+
+\section{Reproducibility}
+
+The substrate is frozen, public, and CC0, registered at OSF under DOI \texttt{10.17605/OSF.IO/WH7Z5}. The pre-registered decision chain --- ADRs 0016, 0018, and 0019 for the curve, and 0021 for the robustness leg --- together with the gate, the regime hashes (\texttt{50bd8a0d}, \texttt{59022cc3}), and the enumerated seed sets, is carried in the public repository \texttt{avalyset/demur}. Every verdict in Table~\ref{tab:sweep} is reproducible offline from the frozen artefact; the determinism result of §6 reproduces from the archived run logs against the recorded SHA256 (\texttt{d15b1a8c}).
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
