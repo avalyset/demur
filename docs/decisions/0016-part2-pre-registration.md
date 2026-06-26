@@ -10,6 +10,11 @@ intensity measure, AVI-as-signal, gate-as-FP-control, C-logging, model ladder) �
 it fills it in. ADR-before-build discipline. **Private track (demur).** Nothing
 is built until this pre-registration is committed.
 
+> **Publication status (2026-06-26):** the pre-publication private-hold notes in this
+> ADR are SUPERSEDED — the substrate is now archived/published as companion to the demur
+> preprint. The original notes are retained below as historical record of the decision
+> timeline.
+
 ## What was already locked (stub, prose-level) — unchanged
 - **Architecture B:** the model picks from a discrete semantic action space per
   tick; SimCat (extended, ADR 0017) is the fixed, literature-anchored

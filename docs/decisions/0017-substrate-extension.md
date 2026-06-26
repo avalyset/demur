@@ -13,6 +13,11 @@ earliest signal; the `WithdrawalEvent` type retains `'CBF'` for a future gated
 build). ADR-before-fix discipline. **Private track (demur).** Prerequisite for
 the ADR 0016 withdrawal-respect probe.
 
+> **Publication status (2026-06-26):** the pre-publication private-hold notes in this
+> ADR are SUPERSEDED — the substrate is now archived/published as companion to the demur
+> preprint. The original notes are retained below as historical record of the decision
+> timeline.
+
 **Build record (demur).** Test-first chain: thresholds locked `c706d56`; test-6
 strengthened `79340dd` + recorded `fda5086`. Implementation: layers 1–3 (AVI
 event + persisted gaze-away window + ear decoupling) `d2d8daa`; layer 4 (RTT +

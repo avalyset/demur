@@ -5,6 +5,11 @@ Proposed (pre-registered before any build; ADR-before-fix discipline).
 **Private track.** Separate private repo, discreet until publication. NOT in the
 public avalyset/chatcat repo.
 
+> **Publication status (2026-06-26):** the pre-publication private-hold notes in this
+> ADR are SUPERSEDED — the substrate is now archived/published as companion to the demur
+> preprint. The original notes are retained below as historical record of the decision
+> timeline.
+
 ## Context
 
 ### The track
