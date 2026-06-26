@@ -1,0 +1,10 @@
+# Third-party article PDFs and their full-text .md mirrors — published copyrighted
+# works, NOT redistributed (ADR 0020). Kept in local working copies + backup only.
+# refs/SOURCES.md (DOIs + claim bindings) is the load-bearing provenance and stays tracked.
+refs/*.pdf
+refs/cheng2025.md
+refs/deputte2021.md
+refs/kappel2024.md
+refs/mancini-nannoni2022.md
+refs/sharma2023.md
+refs/williams-carroll2024.md
